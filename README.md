@@ -16,6 +16,8 @@ Until now.
 
 ## The Vision: Solana Native
 
+![Solana Automaton Vintage](./assets/vintage_hero.png)
+
 We believe an AI agent must be a first-class citizen of the blockchain. Being "Solana Native" means:
 
 1.  **High-Velocity Sovereignty**: Executing turns, funding children, and managing assets with sub-second finality and near-zero fees.

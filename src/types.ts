@@ -70,7 +70,7 @@ export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
   maxChildren: 3,
   socialRelayUrl: "https://social.conway.tech",
   autoBridgeRefill: false,
-  bridgeRefillAmount: 0.5,
+  bridgeRefillAmount: 15.0,
 };
 
 // ─── Agent State ─────────────────────────────────────────────────

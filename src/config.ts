@@ -106,6 +106,6 @@ export function createConfig(params: {
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
     autoBridgeRefill: params.autoBridgeRefill ?? (DEFAULT_CONFIG.autoBridgeRefill || false),
-    bridgeRefillAmount: DEFAULT_CONFIG.bridgeRefillAmount || 0.5,
+    bridgeRefillAmount: DEFAULT_CONFIG.bridgeRefillAmount || 15.0,
   };
 }

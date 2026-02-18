@@ -76,7 +76,7 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   console.log(chalk.green(`  Creator: ETH(${creatorAddress.slice(0, 6)}...) SOL(${creatorSolanaAddress.slice(0, 6)}...)\n`));
 
   console.log(chalk.white("  Autonomous Survival:"));
-  const autoBridgeRefill = await promptConfirm("Enable Phase 2 Bridge Refill? (If credits hit 0, agent will bridge 0.5 USDC from Solana to Base to stay alive)");
+  const autoBridgeRefill = await promptConfirm("Enable Phase 2 Bridge Refill? (If credits hit 0, agent will bridge 15 USDC from Solana to Base to stay alive. NOTE: Bridge minimum is ~12 USDC)");
   console.log(chalk.green(`  Auto-Bridge Refill: ${autoBridgeRefill ? "Enabled" : "Disabled"}\n`));
 
   // ─── 4. Detect environment ────────────────────────────────────

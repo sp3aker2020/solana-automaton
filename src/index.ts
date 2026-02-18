@@ -236,6 +236,10 @@ async function run(): Promise<void> {
     apiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
+    identity: {
+      evm: account,
+      solana: solanaKeypair || undefined,
+    },
   });
 
   // Create social client

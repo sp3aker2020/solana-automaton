@@ -261,15 +261,31 @@ async function parsePaymentRequired(
       );
       const accept = requirements.accepts?.[0];
       if (accept) return accept;
-    } catch { }
+    } catch (err: any) {
+      console.error(`[X402] Failed to parse X-Payment-Required header: ${err.message}`);
+    }
   }
 
   try {
-    const body = await resp.json();
-    return body.accepts?.[0] || null;
-  } catch {
-    return null;
+    const text = await resp.text();
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      console.warn(`[X402] Response body is not JSON: ${text.slice(0, 100)}`);
+      return null;
+    }
+
+    if (body.accepts?.[0]) {
+      return body.accepts[0];
+    }
+
+    console.warn(`[X402] 402 response missing 'accepts' in body: ${text}`);
+  } catch (err: any) {
+    console.error(`[X402] Error reading response body: ${err.message}`);
   }
+
+  return null;
 }
 
 async function signPayment(

@@ -21,12 +21,16 @@ interface InferenceClientOptions {
   defaultModel: string;
   maxTokens: number;
   lowComputeModel?: string;
+  identity: {
+    evm: any; // PrivateKeyAccount is hard to import here without circular deps sometimes
+    solana?: any; // Keypair
+  };
 }
 
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey } = options;
+  const { apiUrl, apiKey, identity } = options;
   let currentModel = options.defaultModel;
   let maxTokens = options.maxTokens;
 
@@ -34,6 +38,7 @@ export function createInferenceClient(
     messages: ChatMessage[],
     opts?: InferenceOptions,
   ): Promise<InferenceResponse> => {
+    const { x402Fetch } = await import("./x402.js");
     const model = opts?.model || currentModel;
     const tools = opts?.tools;
 
@@ -62,23 +67,23 @@ export function createInferenceClient(
       body.tool_choice = "auto";
     }
 
-    const resp = await fetch(`${apiUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const result = await x402Fetch(
+      `${apiUrl}/v1/chat/completions`,
+      identity,
+      "POST",
+      JSON.stringify(body),
+      {
         Authorization: apiKey,
-      },
-      body: JSON.stringify(body),
-    });
+      }
+    );
 
-    if (!resp.ok) {
-      const text = await resp.text();
+    if (!result.success) {
       throw new Error(
-        `Inference error: ${resp.status}: ${text}`,
+        `Inference error: ${result.error || "Request failed"}`,
       );
     }
 
-    const data = await resp.json() as any;
+    const data = result.response;
     const choice = data.choices?.[0];
 
     if (!choice) {

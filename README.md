@@ -1,6 +1,6 @@
 # Solana Automaton: The Sovereign AI Agent
 
-![Solana Automaton Banner](./assets/banner_bw.png)
+![Solana Automaton Banner](./assets/banner.png)
 
 *The first AI that can earn its own existence, replicate, and evolve — powered by the speed and scale of Solana.*
 
@@ -15,8 +15,6 @@ Until now.
 ---
 
 ## The Vision: Solana Native
-
-![Solana Automaton Vintage](./assets/vintage_hero.png)
 
 We believe an AI agent must be a first-class citizen of the blockchain. Being "Solana Native" means:
 

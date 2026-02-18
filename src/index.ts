@@ -8,6 +8,7 @@
  */
 
 import { getWallet, getAutomatonDir } from "./identity/wallet.js";
+import { getSolanaWallet, getSolanaAddress } from "./identity/solana-wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
 import { loadConfig, resolvePath } from "./config.js";
 import { createDatabase } from "./state/database.js";
@@ -59,10 +60,13 @@ Environment:
 
   if (args.includes("--init")) {
     const { account, isNew } = await getWallet();
+    const { keypair, isNew: isSolanaNew } = await getSolanaWallet();
     console.log(
       JSON.stringify({
         address: account.address,
+        solanaAddress: keypair.publicKey.toBase58(),
         isNew,
+        isSolanaNew,
         configDir: getAutomatonDir(),
       }),
     );
@@ -125,6 +129,7 @@ async function showStatus(): Promise<void> {
 === AUTOMATON STATUS ===
 Name:       ${config.name}
 Address:    ${config.walletAddress}
+Solana:     ${await getSolanaAddress() || "not initialized"}
 Creator:    ${config.creatorAddress}
 Sandbox:    ${config.sandboxId}
 State:      ${state}
@@ -269,7 +274,7 @@ async function run(): Promise<void> {
       // Reload skills (may have changed since last loop)
       try {
         skills = loadSkills(skillsDir, db);
-      } catch {}
+      } catch { }
 
       // Run the agent loop
       await runAgentLoop({

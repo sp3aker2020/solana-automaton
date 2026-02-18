@@ -43,13 +43,19 @@
     "clean": "rm -rf dist && pnpm -r clean"
   },
   "dependencies": {
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
+    "@metaplex-foundation/umi-signer-wallet-adapters": "^1.5.1",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
     "better-sqlite3": "^11.0.0",
     "chalk": "^5.3.0",
     "cron-parser": "^4.9.0",
     "gray-matter": "^4.0.3",
     "ora": "^8.0.0",
-    "siwe": "^2.3.0",
     "simple-git": "^3.24.0",
+    "siwe": "^2.3.0",
     "ulid": "^2.3.0",
     "viem": "^2.44.2",
     "yaml": "^2.4.0"

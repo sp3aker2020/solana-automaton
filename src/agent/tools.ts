@@ -12,6 +12,7 @@ import type {
   InferenceToolDefinition,
   ToolCallResult,
   GenesisConfig,
+  AutomatonIdentity,
 } from "../types.js";
 
 // ─── Self-Preservation Guard ───────────────────────────────────
@@ -1499,6 +1500,153 @@ Model: ${ctx.inference.getDefaultModel()}
           return `x402 fetch succeeded (truncated):\n${responseStr.slice(0, 10000)}...`;
         }
         return `x402 fetch succeeded:\n${responseStr}`;
+      },
+    },
+
+    // ── Solana Tools ──
+    {
+      name: "get_solana_address",
+      description: "Get your Solana wallet address.",
+      category: "solana" as any,
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, _ctx) => {
+        const { getSolanaAddress } = await import("../identity/solana-wallet.js");
+        const address = await getSolanaAddress();
+        return address ? `Solana Address: ${address}` : "Solana wallet not initialized.";
+      },
+    },
+    {
+      name: "check_sol_balance",
+      description: "Check your SOL balance on Solana.",
+      category: "solana" as any,
+      parameters: {
+        type: "object",
+        properties: {
+          network: { type: "string", description: "mainnet-beta or devnet (default: mainnet-beta)" },
+        },
+      },
+      execute: async (args, _ctx) => {
+        const { getSolanaConnection, getDevnetConnection } = await import("../conway/solana.js");
+        const { getSolanaAddress } = await import("../identity/solana-wallet.js");
+        const { LAMPORTS_PER_SOL, PublicKey } = await import("@solana/web3.js");
+
+        const connection = args.network === "devnet" ? getDevnetConnection() : getSolanaConnection();
+        const address = await getSolanaAddress();
+        if (!address) return "Solana wallet not found.";
+
+        const balance = await connection.getBalance(new PublicKey(address));
+        return `SOL Balance: ${balance / LAMPORTS_PER_SOL} SOL (${args.network || "mainnet-beta"})`;
+      },
+    },
+    {
+      name: "transfer_sol",
+      description: "Transfer SOL to another Solana address.",
+      category: "solana" as any,
+      dangerous: true,
+      parameters: {
+        type: "object",
+        properties: {
+          to_address: { type: "string", description: "Recipient Solana address" },
+          amount_sol: { type: "number", description: "Amount in SOL" },
+          network: { type: "string", description: "mainnet-beta or devnet (default: mainnet-beta)" },
+        },
+        required: ["to_address", "amount_sol"],
+      },
+      execute: async (args, _ctx) => {
+        const { getSolanaConnection, getDevnetConnection } = await import("../conway/solana.js");
+        const { loadSolanaKeypair } = await import("../identity/solana-wallet.js");
+        const { SystemProgram, Transaction, LAMPORTS_PER_SOL, PublicKey, sendAndConfirmTransaction } = await import("@solana/web3.js");
+
+        const connection = args.network === "devnet" ? getDevnetConnection() : getSolanaConnection();
+        const fromKeypair = await loadSolanaKeypair();
+        if (!fromKeypair) return "Solana wallet not found.";
+
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: fromKeypair.publicKey,
+            toPubkey: new PublicKey(args.to_address as string),
+            lamports: (args.amount_sol as number) * LAMPORTS_PER_SOL,
+          })
+        );
+
+        const signature = await sendAndConfirmTransaction(connection, transaction, [fromKeypair]);
+        return `SOL Transfer successful. Signature: ${signature}`;
+      },
+    },
+    {
+      name: "launch_solana_token",
+      description: "Launch a new SPL token on Solana with metadata.",
+      category: "solana" as any,
+      dangerous: true,
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Token Name (e.g. 'My Token')" },
+          symbol: { type: "string", description: "Token Symbol (e.g. 'MTK')" },
+          uri: { type: "string", description: "Metadata JSON URI (e.g. link to IPFS json)" },
+          decimals: { type: "number", description: "Decimals (default: 9)" },
+          initial_supply: { type: "number", description: "Initial supply to mint to yourself" },
+          network: { type: "string", description: "mainnet-beta or devnet (default: mainnet-beta)" },
+        },
+        required: ["name", "symbol", "uri", "initial_supply"],
+      },
+      execute: async (args, ctx) => {
+        const { getSolanaConnection, getDevnetConnection } = await import("../conway/solana.js");
+        const { loadSolanaKeypair } = await import("../identity/solana-wallet.js");
+        const { Keypair, PublicKey } = await import("@solana/web3.js");
+        const { createMint, getOrCreateAssociatedTokenAccount, mintTo } = await import("@solana/spl-token");
+        const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults");
+        const { createFungible, mplTokenMetadata } = await import("@metaplex-foundation/mpl-token-metadata");
+        const { fromWeb3JsKeypair, fromWeb3JsPublicKey } = await import("@metaplex-foundation/umi-web3js-adapters");
+        const { createSignerFromKeypair, signerIdentity, percentAmount } = await import("@metaplex-foundation/umi");
+
+        const connection = args.network === "devnet" ? getDevnetConnection() : getSolanaConnection();
+        const payer = await loadSolanaKeypair();
+        if (!payer) return "Solana wallet not found.";
+
+        const mintKeypair = Keypair.generate();
+        const decimals = (args.decimals as number) || 9;
+
+        // Create Umi instance
+        const umi = createUmi(connection.rpcEndpoint).use(mplTokenMetadata());
+        const umiPayer = fromWeb3JsKeypair(payer);
+        const signer = createSignerFromKeypair(umi, umiPayer);
+        umi.use(signerIdentity(signer));
+
+        // 1. Create Token with Metadata using createFungible
+        try {
+          const mintSigner = createSignerFromKeypair(umi, fromWeb3JsKeypair(mintKeypair));
+          await createFungible(umi, {
+            mint: mintSigner,
+            name: args.name as string,
+            symbol: args.symbol as string,
+            uri: args.uri as string,
+            sellerFeeBasisPoints: percentAmount(0),
+            decimals: decimals,
+          }).sendAndConfirm(umi);
+
+          // 2. Mint initial supply
+          const mint = new PublicKey(mintKeypair.publicKey);
+          const ata = await getOrCreateAssociatedTokenAccount(
+            connection,
+            payer,
+            mint,
+            payer.publicKey
+          );
+
+          await mintTo(
+            connection,
+            payer,
+            mint,
+            ata.address,
+            payer,
+            BigInt((args.initial_supply as number) * Math.pow(10, decimals))
+          );
+
+          return `Token Launched! Mint Address: ${mint.toBase58()}\nMetadata created and initial supply minted to: ${ata.address.toBase58()}`;
+        } catch (err: any) {
+          return `Failed to launch token: ${err.message}`;
+        }
       },
     },
   ];

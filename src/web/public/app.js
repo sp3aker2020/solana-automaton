@@ -121,4 +121,4 @@ function animateValue(id, endValue) {
 // Initial Boot
 console.log("Sovereign Dashboard: Port 18789 Link Established");
 updateDashboard();
-setInterval(updateDashboard, 5000);
+setInterval(updateDashboard, 15000);

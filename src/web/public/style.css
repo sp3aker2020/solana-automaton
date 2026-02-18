@@ -48,16 +48,16 @@ body {
 .dashboard-banner img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    opacity: 0.8;
+    object-fit: contain;
+    /* Don't crop */
+    opacity: 1;
 }
 
 .dashboard-logo {
-    width: 32px;
-    height: 32px;
-    filter: invert(1) brightness(2);
-    /* Make the black 'S' white/neon-ish */
-    margin-right: 10px;
+    width: 44px;
+    height: 44px;
+    margin-right: 15px;
+    object-fit: contain;
 }
 
 header {

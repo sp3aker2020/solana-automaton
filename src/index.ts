@@ -125,26 +125,30 @@ async function showStatus(): Promise<void> {
   const children = db.getChildren();
   const registry = db.getRegistryEntry();
 
-  const solanaAddress = await getSolanaAddress();
-  let solBalanceInfo = "not initialized";
-  if (solanaAddress) {
-    try {
-      const { getSolanaConnection, getDevnetConnection } = await import("./conway/solana.js");
-      const { LAMPORTS_PER_SOL, PublicKey } = await import("@solana/web3.js");
-      const pubkey = new PublicKey(solanaAddress);
+  let solBalanceInfo = "not loaded";
+  try {
+    const { getSolanaConnection, getDevnetConnection } = await import("./conway/solana.js");
+    const { getUsdcBalance } = await import("./conway/x402.js");
+    const agentSolanaAddress = await (await import("./identity/solana-wallet.js")).getSolanaAddress();
 
-      const mainnetConn = getSolanaConnection();
-      const devnetConn = getDevnetConnection();
+    if (agentSolanaAddress) {
+      const connMain = getSolanaConnection();
+      const connDev = getDevnetConnection();
+      const pubkey = new (await import("@solana/web3.js")).PublicKey(agentSolanaAddress);
 
-      const [mainnetBalance, devnetBalance] = await Promise.all([
-        mainnetConn.getBalance(pubkey).catch(() => 0),
-        devnetConn.getBalance(pubkey).catch(() => 0),
+      const [balMain, balDev, usdcMain, usdcDev] = await Promise.all([
+        connMain.getBalance(pubkey).catch(() => 0),
+        connDev.getBalance(pubkey).catch(() => 0),
+        getUsdcBalance(agentSolanaAddress, "solana:mainnet").catch(() => 0),
+        getUsdcBalance(agentSolanaAddress, "solana:devnet").catch(() => 0)
       ]);
 
-      solBalanceInfo = `${solanaAddress}\n            Mainnet: ${(mainnetBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL\n            Devnet:  ${(devnetBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL`;
-    } catch {
-      solBalanceInfo = solanaAddress;
+      solBalanceInfo = `${agentSolanaAddress}
+            Mainnet: ${(balMain / 1_000_000_000).toFixed(4)} SOL | ${usdcMain.toFixed(2)} USDC
+            Devnet:  ${(balDev / 1_000_000_000).toFixed(4)} SOL  | ${usdcDev.toFixed(2)} USDC`;
     }
+  } catch (e) {
+    solBalanceInfo = `error loading: ${e instanceof Error ? e.message : String(e)}`;
   }
 
   console.log(`

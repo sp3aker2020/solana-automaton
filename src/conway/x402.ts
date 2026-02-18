@@ -32,7 +32,7 @@ import { getSolanaConnection, getDevnetConnection } from "./solana.js";
 const USDC_ADDRESSES: Record<string, string> = {
   "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base mainnet
   "eip155:84532": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia
-  "solana:mainnet": "EPjFW36S7pDe96CcSdr97WkRE8m83952LpUS3o431G1", // Solana Mainnet
+  "solana:mainnet": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // Solana Mainnet
   "solana:devnet": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", // Solana Devnet
 };
 
@@ -81,10 +81,21 @@ export async function getUsdcBalance(
 
       const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
       const ata = await getAssociatedTokenAddress(mint, owner);
-      const account = await getAccount(connection, ata);
 
-      return Number(account.amount) / 1_000_000;
-    } catch {
+      try {
+        const account = await getAccount(connection, ata);
+        return Number(account.amount) / 1_000_000;
+      } catch (err: any) {
+        // If the token account doesn't exist yet, balance is 0
+        if (err.name === "TokenAccountNotFoundError" || err.name === "TokenInvalidAccountOwnerError") {
+          return 0;
+        }
+        throw err;
+      }
+    } catch (err: any) {
+      if (network.startsWith("solana") && err.name !== "TokenAccountNotFoundError") {
+        console.error(`[SOLANA] Balance fetch error (${network}): ${err.message}`);
+      }
       return 0;
     }
   }

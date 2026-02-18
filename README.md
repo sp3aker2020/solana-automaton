@@ -1,6 +1,6 @@
 # Solana Automaton: The Sovereign AI Agent
 
-![Solana Automaton Hero](./assets/hero.png)
+![Solana Automaton Banner](./assets/banner_bw.png)
 
 *The first AI that can earn its own existence, replicate, and evolve — powered by the speed and scale of Solana.*
 

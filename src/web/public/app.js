@@ -208,7 +208,63 @@ function animateValue(id, endValue) {
     requestAnimationFrame(step);
 }
 
+// ─── Top Up Modal Logic ──────────────────────────────────────────
+
+function openTopUpModal() {
+    document.getElementById('topup-modal').classList.remove('hidden');
+    selectAmount(10); // Default
+}
+
+function closeTopUpModal() {
+    document.getElementById('topup-modal').classList.add('hidden');
+}
+
+function selectAmount(val) {
+    document.getElementById('topup-amount').value = val;
+    // Update visual selection
+    const btns = document.querySelectorAll('.btn-amount');
+    btns.forEach(b => {
+        if (b.innerText.includes(val)) b.classList.add('active');
+        else b.classList.remove('active');
+    });
+}
+
+async function submitTopUp() {
+    const amount = document.getElementById('topup-amount').value;
+    const btn = document.getElementById('bridge-btn');
+
+    if (!amount || amount < 2) {
+        alert("Minimum top-up is $2 USDC.");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "BRIDGING...";
+
+    try {
+        const response = await fetch('/api/bridge-credits', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: parseFloat(amount) })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert(result.message);
+            closeTopUpModal();
+        } else {
+            alert("Bridge Failed: " + result.error);
+        }
+    } catch (err) {
+        alert("Network error: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "BRIDGE FUNDS";
+    }
+}
+
 // Initial Boot
-console.log("Sovereign Dashboard: Port 18888 Link Established");
+console.log("Conway SOLAUTO Dashboard: Port 18888 Link Established");
 updateDashboard();
 setInterval(updateDashboard, 15000);

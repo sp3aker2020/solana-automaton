@@ -188,6 +188,38 @@ export function startDashboardServer(port: number = 18888) {
         }
     });
 
+    /**
+     * Bridge Credits Endpoint
+     * Triggers a self-transfer from Solana to Base to fund credits
+     */
+    app.post("/api/bridge-credits", async (req, res) => {
+        try {
+            const { amount } = req.body;
+            if (!amount || amount <= 0) {
+                return res.status(400).json({ success: false, error: "Invalid amount" });
+            }
+
+            // Dynamically import to ensure circular deps don't break
+            const { bridgeUsdcToBase } = await import("../agent/bridge/index.js");
+
+            console.log(`[DASHBOARD] Bridging ${amount} USDC to credits (Self-Refill)...`);
+            const result = await bridgeUsdcToBase(Number(amount));
+
+            if (result.success) {
+                res.json({
+                    success: true,
+                    txId: result.txId,
+                    message: `Bridging initiated! ${amount} USDC sent. Credits will arrive shortly.`
+                });
+            } else {
+                res.status(500).json({ success: false, error: result.error || "Bridge failed" });
+            }
+        } catch (err: any) {
+            console.error("[DASHBOARD] Bridge Error:", err);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
     app.listen(port, () => {
         console.log(`\n  ✨ Sovereign Dashboard active at http://localhost:${port}`);
     });

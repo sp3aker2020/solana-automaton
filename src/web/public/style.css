@@ -532,3 +532,43 @@ footer {
 .hidden {
     display: none !important;
 }
+
+/* Top Up Styles */
+.btn-outline-cyan {
+    background: transparent;
+    border: 1px solid var(--acc-cyan);
+    color: var(--acc-cyan);
+    font-size: 11px;
+    padding: 6px 14px;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.btn-outline-cyan:hover {
+    background: rgba(0, 242, 255, 0.1);
+    box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+}
+
+.amount-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.btn-amount {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: #fff;
+    padding: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.btn-amount:hover,
+.btn-amount.active {
+    background: rgba(0, 242, 255, 0.2);
+    border-color: var(--acc-cyan);
+}

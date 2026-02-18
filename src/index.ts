@@ -120,11 +120,19 @@ Environment:
 
   if (args.includes("--bridge-funds")) {
     const amountStr = args[args.indexOf("--bridge-funds") + 1];
-    const amount = parseFloat(amountStr);
+    let amount = parseFloat(amountStr);
+
     if (isNaN(amount) || amount <= 0) {
-      console.error("Please specify a valid amount of USDC to bridge.");
+      const { promptRequired } = await import("./setup/prompts.js");
+      const input = await promptRequired("Amount of USDC to bridge to credits:");
+      amount = parseFloat(input);
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      console.error("Invalid amount.");
       process.exit(1);
     }
+
     await bridgeFunds(amount);
     process.exit(0);
   }

@@ -210,7 +210,7 @@ export async function x402Fetch(
     }
 
     // Parse payment requirements
-    const requirement = await parsePaymentRequired(initialResp);
+    const requirement = await parsePaymentRequired(initialResp, accounts);
     if (!requirement) {
       return { success: false, error: "Could not parse payment requirements" };
     }
@@ -257,39 +257,60 @@ export async function x402Fetch(
 
 async function parsePaymentRequired(
   resp: Response,
+  wallets: { evm: any; solana?: any },
 ): Promise<PaymentRequirement | null> {
   const header = resp.headers.get("X-Payment-Required");
+  let requirements: any = null;
+
   if (header) {
     try {
-      const requirements = JSON.parse(
+      requirements = JSON.parse(
         Buffer.from(header, "base64").toString("utf-8"),
       );
-      const accept = requirements.accepts?.[0];
-      if (accept) return accept;
     } catch (err: any) {
       console.error(`[X402] Failed to parse X-Payment-Required header: ${err.message}`);
     }
   }
 
-  try {
-    const text = await resp.text();
-    let body;
+  if (!requirements) {
     try {
-      body = JSON.parse(text);
-    } catch {
-      console.warn(`[X402] Response body is not JSON: ${text.slice(0, 100)}`);
+      const text = await resp.text();
+      try {
+        requirements = JSON.parse(text);
+      } catch {
+        console.warn(`[X402] 402 response body is not JSON: ${text.slice(0, 100)}`);
+        return null;
+      }
+    } catch (err: any) {
+      console.error(`[X402] Error reading response body: ${err.message}`);
       return null;
     }
-
-    if (body.accepts?.[0]) {
-      return body.accepts[0];
-    }
-
-    console.warn(`[X402] 402 response missing 'accepts' in body: ${text}`);
-  } catch (err: any) {
-    console.error(`[X402] Error reading response body: ${err.message}`);
   }
 
+  if (!requirements || !requirements.accepts) {
+    console.warn(`[X402] 402 response missing 'accepts':`, JSON.stringify(requirements));
+    return null;
+  }
+
+  const accepts = requirements.accepts as PaymentRequirement[];
+  console.log(`[X402] Server accepts ${accepts.length} payment options: ${accepts.map(a => a.network).join(", ")}`);
+
+  // Favor Solana if we have a wallet and balance?
+  // For now, find first one we have a wallet for
+  for (const accept of accepts) {
+    if (accept.network.startsWith("solana:") && wallets.solana) {
+      console.log(`[X402] Selected Solana payment path: ${accept.network}`);
+      return accept;
+    }
+    if (accept.network.startsWith("eip155:") && wallets.evm) {
+      // We have EVM wallet, but we might want to wait if Solana is an option later in the list
+      // But usually there's only one.
+      console.log(`[X402] Selected EVM payment path: ${accept.network}`);
+      return accept;
+    }
+  }
+
+  console.warn(`[X402] No compatible wallet found for accepted networks.`);
   return null;
 }
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./prelude.js";
 /**
  * Conway Automaton Runtime
  *
@@ -10,7 +11,12 @@
 import { getWallet, getAutomatonDir } from "./identity/wallet.js";
 import { getSolanaWallet, getSolanaAddress } from "./identity/solana-wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
-import { loadConfig, resolvePath } from "./config.js";
+import { Command } from "commander";
+import chalk from "chalk";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { createConfig, loadConfig, saveConfig, resolvePath } from "./config.js";
 import { createDatabase } from "./state/database.js";
 import { createConwayClient } from "./conway/client.js";
 import { createInferenceClient } from "./conway/inference.js";

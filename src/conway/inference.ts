@@ -67,14 +67,23 @@ export function createInferenceClient(
       body.tool_choice = "auto";
     }
 
+    const headers: Record<string, string> = {
+      "X-Accept-Payment": "x402",
+    };
+
+    // If we're hitting the inference endpoint specifically, omit API key to trigger x402 flow
+    // unless we definitely have credits (which we don't know here easily, but the user has 0).
+    const isDedicatedInference = apiUrl.includes("inference.conway.tech");
+    if (!isDedicatedInference && apiKey) {
+      headers.Authorization = apiKey;
+    }
+
     const result = await x402Fetch(
       `${apiUrl}/v1/chat/completions`,
       identity,
       "POST",
       JSON.stringify(body),
-      {
-        Authorization: apiKey,
-      }
+      headers
     );
 
     if (!result.success) {

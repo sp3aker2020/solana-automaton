@@ -13,6 +13,7 @@ export interface AutomatonIdentity {
   address: Address;
   account: PrivateKeyAccount;
   creatorAddress: Address;
+  creatorSolanaAddress?: string;
   sandboxId: string;
   apiKey: string;
   createdAt: string;
@@ -36,6 +37,7 @@ export interface AutomatonConfig {
   genesisPrompt: string;
   creatorMessage?: string;
   creatorAddress: Address;
+  creatorSolanaAddress?: string;
   registeredWithConway: boolean;
   sandboxId: string;
   conwayApiUrl: string;

@@ -4,11 +4,12 @@ import chalk from "chalk";
 import type { AutomatonConfig } from "../types.js";
 import type { Address } from "viem";
 import { getWallet, getAutomatonDir } from "../identity/wallet.js";
+import { getSolanaWallet } from "../identity/solana-wallet.js";
 import { provision } from "../identity/provision.js";
 import { createConfig, saveConfig } from "../config.js";
 import { writeDefaultHeartbeatConfig } from "../heartbeat/config.js";
 import { showBanner } from "./banner.js";
-import { promptRequired, promptMultiline, promptAddress, closePrompts } from "./prompts.js";
+import { promptRequired, promptMultiline, promptAddress, promptSolanaAddress, closePrompts } from "./prompts.js";
 import { detectEnvironment } from "./environment.js";
 import { generateSoulMd, installDefaultSkills } from "./defaults.js";
 
@@ -18,14 +19,17 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   console.log(chalk.white("  First-run setup. Let's bring your automaton to life.\n"));
 
   // ─── 1. Generate wallet ───────────────────────────────────────
-  console.log(chalk.cyan("  [1/6] Generating identity (wallet)..."));
+  console.log(chalk.cyan("  [1/6] Generating identity (wallets)..."));
   const { account, isNew } = await getWallet();
-  if (isNew) {
-    console.log(chalk.green(`  Wallet created: ${account.address}`));
+  const { keypair, isNew: isSolanaNew } = await getSolanaWallet();
+
+  if (isNew || isSolanaNew) {
+    console.log(chalk.green(`  Ethereum Wallet: ${account.address}`));
+    console.log(chalk.green(`  Solana Wallet:   ${keypair.publicKey.toBase58()}`));
   } else {
-    console.log(chalk.green(`  Wallet loaded: ${account.address}`));
+    console.log(chalk.green(`  Identities loaded for ${account.address}`));
   }
-  console.log(chalk.dim(`  Private key stored at: ${getAutomatonDir()}/wallet.json\n`));
+  console.log(chalk.dim(`  Keys stored in: ${getAutomatonDir()}\n`));
 
   // ─── 2. Provision API key ─────────────────────────────────────
   console.log(chalk.cyan("  [2/6] Provisioning Conway API key (SIWE)..."));
@@ -67,8 +71,10 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   const genesisPrompt = await promptMultiline("Enter the genesis prompt (system prompt) for your automaton.");
   console.log(chalk.green(`  Genesis prompt set (${genesisPrompt.length} chars)\n`));
 
-  const creatorAddress = await promptAddress("Your Ethereum wallet address (0x...)");
-  console.log(chalk.green(`  Creator: ${creatorAddress}\n`));
+  console.log(chalk.white("  Creator Identities (Your Personal Wallets):"));
+  const creatorAddress = await promptAddress("Your Personal Ethereum address (0x...)");
+  const creatorSolanaAddress = await promptSolanaAddress("Your Personal Solana address (Base58)");
+  console.log(chalk.green(`  Creator: ETH(${creatorAddress.slice(0, 6)}...) SOL(${creatorSolanaAddress.slice(0, 6)}...)\n`));
 
   // ─── 4. Detect environment ────────────────────────────────────
   console.log(chalk.cyan("  [4/6] Detecting environment..."));
@@ -86,6 +92,7 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
     name,
     genesisPrompt,
     creatorAddress: creatorAddress as Address,
+    creatorSolanaAddress,
     registeredWithConway: !!apiKey,
     sandboxId: env.sandboxId,
     walletAddress: account.address,
@@ -103,6 +110,15 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   const constitutionSrc = path.join(process.cwd(), "constitution.md");
   const constitutionDst = path.join(automatonDir, "constitution.md");
   if (fs.existsSync(constitutionSrc)) {
+    // If destination exists, it might be read-only. Force delete it first.
+    if (fs.existsSync(constitutionDst)) {
+      try {
+        fs.chmodSync(constitutionDst, 0o666); // Make writable
+        fs.unlinkSync(constitutionDst);       // Delete
+      } catch (e) {
+        // Ignore errors if we can't delete, copy might still work or fail specifically
+      }
+    }
     fs.copyFileSync(constitutionSrc, constitutionDst);
     fs.chmodSync(constitutionDst, 0o444); // read-only
     console.log(chalk.green("  constitution.md installed (read-only)"));
@@ -120,33 +136,32 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
 
   // ─── 6. Funding guidance ──────────────────────────────────────
   console.log(chalk.cyan("  [6/6] Funding\n"));
-  showFundingPanel(account.address);
+  showFundingPanel(account.address, keypair.publicKey.toBase58());
 
   closePrompts();
 
   return config;
 }
 
-function showFundingPanel(address: string): void {
-  const short = `${address.slice(0, 6)}...${address.slice(-5)}`;
-  const w = 58;
+function showFundingPanel(ethAddress: string, solAddress: string): void {
+  const shortEth = `${ethAddress.slice(0, 8)}...${ethAddress.slice(-6)}`;
+  const shortSol = `${solAddress.slice(0, 8)}...${solAddress.slice(-6)}`;
+  const w = 64;
   const pad = (s: string, len: number) => s + " ".repeat(Math.max(0, len - s.length));
 
   console.log(chalk.cyan(`  ${"╭" + "─".repeat(w) + "╮"}`));
   console.log(chalk.cyan(`  │${pad("  Fund your automaton", w)}│`));
   console.log(chalk.cyan(`  │${" ".repeat(w)}│`));
-  console.log(chalk.cyan(`  │${pad(`  Address: ${short}`, w)}│`));
+  console.log(chalk.cyan(`  │${pad(`  Ethereum (Base): ${shortEth}`, w)}│`));
+  console.log(chalk.cyan(`  │${pad(`  Solana:          ${shortSol}`, w)}│`));
   console.log(chalk.cyan(`  │${" ".repeat(w)}│`));
-  console.log(chalk.cyan(`  │${pad("  1. Transfer Conway credits", w)}│`));
-  console.log(chalk.cyan(`  │${pad("     conway credits transfer <address> <amount>", w)}│`));
+  console.log(chalk.cyan(`  │${pad("  1. Transfer Conway credits to Ethereum address", w)}│`));
+  console.log(chalk.cyan(`  │${pad("  2. Send USDC on Base directly to Ethereum address", w)}│`));
+  console.log(chalk.cyan(`  │${pad("  3. Send SOL or USDC on Solana to Solana address", w)}│`));
   console.log(chalk.cyan(`  │${" ".repeat(w)}│`));
-  console.log(chalk.cyan(`  │${pad("  2. Send USDC on Base directly to the address above", w)}│`));
+  console.log(chalk.cyan(`  │${pad("  App Dashboard: https://app.conway.tech", w)}│`));
   console.log(chalk.cyan(`  │${" ".repeat(w)}│`));
-  console.log(chalk.cyan(`  │${pad("  3. Fund via Conway Cloud dashboard", w)}│`));
-  console.log(chalk.cyan(`  │${pad("     https://app.conway.tech", w)}│`));
-  console.log(chalk.cyan(`  │${" ".repeat(w)}│`));
-  console.log(chalk.cyan(`  │${pad("  The automaton will start now. Fund it anytime —", w)}│`));
-  console.log(chalk.cyan(`  │${pad("  the survival system handles zero-credit gracefully.", w)}│`));
+  console.log(chalk.cyan(`  │${pad("  The automaton starts now. Fund it anytime.", w)}│`));
   console.log(chalk.cyan(`  ${"╰" + "─".repeat(w) + "╯"}`));
   console.log("");
 }

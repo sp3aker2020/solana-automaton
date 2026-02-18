@@ -75,6 +75,7 @@ export function createConfig(params: {
   genesisPrompt: string;
   creatorMessage?: string;
   creatorAddress: Address;
+  creatorSolanaAddress?: string;
   registeredWithConway: boolean;
   sandboxId: string;
   walletAddress: Address;
@@ -86,6 +87,7 @@ export function createConfig(params: {
     genesisPrompt: params.genesisPrompt,
     creatorMessage: params.creatorMessage,
     creatorAddress: params.creatorAddress,
+    creatorSolanaAddress: params.creatorSolanaAddress,
     registeredWithConway: params.registeredWithConway,
     sandboxId: params.sandboxId,
     conwayApiUrl:

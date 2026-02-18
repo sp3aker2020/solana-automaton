@@ -47,6 +47,8 @@ node dist/index.js --run
 
 Running `--init` will generate your Ethereum and Solana identities. fund your Solana wallet to begin.
 
+![Setup Wizard Funding Panel](./assets/setup_wizard.png)
+
 ---
 
 ## Local Development & Testing

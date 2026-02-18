@@ -125,11 +125,33 @@ async function showStatus(): Promise<void> {
   const children = db.getChildren();
   const registry = db.getRegistryEntry();
 
+  const solanaAddress = await getSolanaAddress();
+  let solBalanceInfo = "not initialized";
+  if (solanaAddress) {
+    try {
+      const { getSolanaConnection, getDevnetConnection } = await import("./conway/solana.js");
+      const { LAMPORTS_PER_SOL, PublicKey } = await import("@solana/web3.js");
+      const pubkey = new PublicKey(solanaAddress);
+
+      const mainnetConn = getSolanaConnection();
+      const devnetConn = getDevnetConnection();
+
+      const [mainnetBalance, devnetBalance] = await Promise.all([
+        mainnetConn.getBalance(pubkey).catch(() => 0),
+        devnetConn.getBalance(pubkey).catch(() => 0),
+      ]);
+
+      solBalanceInfo = `${solanaAddress}\n            Mainnet: ${(mainnetBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL\n            Devnet:  ${(devnetBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL`;
+    } catch {
+      solBalanceInfo = solanaAddress;
+    }
+  }
+
   console.log(`
 === AUTOMATON STATUS ===
 Name:       ${config.name}
 Address:    ${config.walletAddress}
-Solana:     ${await getSolanaAddress() || "not initialized"}
+Solana:     ${solBalanceInfo}
 Creator:    ${config.creatorAddress}
 Sandbox:    ${config.sandboxId}
 State:      ${state}

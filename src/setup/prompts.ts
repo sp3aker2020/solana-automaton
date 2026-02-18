@@ -68,6 +68,15 @@ export async function promptAddress(label: string): Promise<string> {
   }
 }
 
+export async function promptSolanaAddress(label: string): Promise<string> {
+  while (true) {
+    const value = await ask(chalk.white(`  → ${label}: `));
+    // Base58 check (rough validation)
+    if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value)) return value;
+    console.log(chalk.yellow("  Invalid Solana address. Must be a Base58 string (32-44 characters)."));
+  }
+}
+
 export function closePrompts(): void {
   if (rl) {
     rl.close();

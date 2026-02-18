@@ -39,13 +39,13 @@ async function main(): Promise<void> {
   // ─── CLI Commands ────────────────────────────────────────────
 
   if (args.includes("--version") || args.includes("-v")) {
-    console.log(`Conway Automaton v${VERSION}`);
+    console.log(`Conway SOLAUTO v${VERSION}`);
     process.exit(0);
   }
 
   if (args.includes("--help") || args.includes("-h")) {
     console.log(`
-Conway Automaton v${VERSION}
+Conway SOLAUTO v${VERSION}
 Sovereign AI Agent Runtime
 
 Usage:

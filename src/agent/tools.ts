@@ -190,11 +190,35 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "check_usdc_balance",
       description: "Check your on-chain USDC balance on Base.",
       category: "conway",
-      parameters: { type: "object", properties: {} },
-      execute: async (_args, ctx) => {
+      parameters: {
+        type: "object",
+        properties: {
+          network: {
+            type: "string",
+            description: "Network to check (base, solana, solana-devnet). Default: base"
+          }
+        }
+      },
+      execute: async (args, ctx) => {
         const { getUsdcBalance } = await import("../conway/x402.js");
-        const balance = await getUsdcBalance(ctx.identity.address);
-        return `USDC balance: ${balance.toFixed(6)} USDC on Base`;
+        const { getSolanaAddress } = await import("../identity/solana-wallet.js");
+
+        let network = (args.network as string) || "base";
+        let networkKey = "eip155:8453";
+        let address: string = ctx.identity.address;
+
+        if (network === "solana") {
+          networkKey = "solana:mainnet";
+          address = await getSolanaAddress() || "";
+        } else if (network === "solana-devnet") {
+          networkKey = "solana:devnet";
+          address = await getSolanaAddress() || "";
+        }
+
+        if (!address) return "Wallet address not found.";
+
+        const balance = await getUsdcBalance(address, networkKey);
+        return `USDC balance: ${balance.toFixed(6)} USDC on ${networkKey}`;
       },
     },
     {
@@ -1478,9 +1502,12 @@ Model: ${ctx.inference.getDefaultModel()}
           ? JSON.parse(args.headers as string)
           : undefined;
 
+        const { loadSolanaKeypair } = await import("../identity/solana-wallet.js");
+        const solanaKeypair = await loadSolanaKeypair();
+
         const result = await x402Fetch(
           url,
-          ctx.identity.account,
+          { evm: ctx.identity.account, solana: solanaKeypair || undefined },
           method,
           body,
           extraHeaders,

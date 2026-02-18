@@ -13,11 +13,27 @@ import {
   type PrivateKeyAccount,
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
+import {
+  Connection,
+  PublicKey,
+  Transaction,
+  SystemProgram,
+  Keypair,
+  sendAndConfirmTransaction
+} from "@solana/web3.js";
+import {
+  getOrCreateAssociatedTokenAccount,
+  createTransferCheckedInstruction,
+  TOKEN_PROGRAM_ID
+} from "@solana/spl-token";
+import { getSolanaConnection, getDevnetConnection } from "./solana.js";
 
 // USDC contract addresses
-const USDC_ADDRESSES: Record<string, Address> = {
+const USDC_ADDRESSES: Record<string, string> = {
   "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base mainnet
   "eip155:84532": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia
+  "solana:mainnet": "EPjFW36S7pDe96CcSdr97WkRE8m83952LpUS3o431G1", // Solana Mainnet
+  "solana:devnet": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", // Solana Devnet
 };
 
 const CHAINS: Record<string, any> = {
@@ -39,9 +55,9 @@ interface PaymentRequirement {
   scheme: string;
   network: string;
   maxAmountRequired: string;
-  payToAddress: Address;
+  payToAddress: string;
   requiredDeadlineSeconds: number;
-  usdcAddress: Address;
+  usdcAddress: string;
 }
 
 interface X402PaymentResult {
@@ -54,9 +70,25 @@ interface X402PaymentResult {
  * Get the USDC balance for the automaton's wallet on a given network.
  */
 export async function getUsdcBalance(
-  address: Address,
+  address: string,
   network: string = "eip155:8453",
 ): Promise<number> {
+  if (network.startsWith("solana")) {
+    try {
+      const connection = network === "solana:devnet" ? getDevnetConnection() : getSolanaConnection();
+      const mint = new PublicKey(USDC_ADDRESSES[network]);
+      const owner = new PublicKey(address);
+
+      const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+      const ata = await getAssociatedTokenAddress(mint, owner);
+      const account = await getAccount(connection, ata);
+
+      return Number(account.amount) / 1_000_000;
+    } catch {
+      return 0;
+    }
+  }
+
   const chain = CHAINS[network];
   const usdcAddress = USDC_ADDRESSES[network];
   if (!chain || !usdcAddress) {
@@ -70,10 +102,10 @@ export async function getUsdcBalance(
     });
 
     const balance = await client.readContract({
-      address: usdcAddress,
+      address: usdcAddress as Address,
       abi: BALANCE_OF_ABI,
       functionName: "balanceOf",
-      args: [address],
+      args: [address as Address],
     });
 
     // USDC has 6 decimals
@@ -146,7 +178,7 @@ export async function checkX402(
  */
 export async function x402Fetch(
   url: string,
-  account: PrivateKeyAccount,
+  accounts: { evm: PrivateKeyAccount; solana?: Keypair },
   method: string = "GET",
   body?: string,
   headers?: Record<string, string>,
@@ -172,8 +204,15 @@ export async function x402Fetch(
       return { success: false, error: "Could not parse payment requirements" };
     }
 
-    // Sign payment
-    const payment = await signPayment(account, requirement);
+    // Sign payment based on network
+    let payment: any;
+    if (requirement.network.startsWith("solana")) {
+      if (!accounts.solana) return { success: false, error: "Solana wallet required but not provided" };
+      payment = await signSolanaPayment(accounts.solana, requirement);
+    } else {
+      payment = await signPayment(accounts.evm, requirement);
+    }
+
     if (!payment) {
       return { success: false, error: "Failed to sign payment" };
     }
@@ -211,7 +250,7 @@ async function parsePaymentRequired(
       );
       const accept = requirements.accepts?.[0];
       if (accept) return accept;
-    } catch {}
+    } catch { }
   }
 
   try {
@@ -242,7 +281,7 @@ async function signPayment(
       name: "USD Coin",
       version: "2",
       chainId: requirement.network === "eip155:84532" ? 84532 : 8453,
-      verifyingContract: requirement.usdcAddress,
+      verifyingContract: requirement.usdcAddress as Address,
     } as const;
 
     const types = {
@@ -258,7 +297,7 @@ async function signPayment(
 
     const message = {
       from: account.address,
-      to: requirement.payToAddress,
+      to: requirement.payToAddress as Address,
       value: amount,
       validAfter: BigInt(validAfter),
       validBefore: BigInt(validBefore),
@@ -289,6 +328,58 @@ async function signPayment(
       },
     };
   } catch {
+    return null;
+  }
+}
+async function signSolanaPayment(
+  keypair: Keypair,
+  requirement: PaymentRequirement,
+): Promise<any | null> {
+  try {
+    const connection = requirement.network === "solana:devnet" ? getDevnetConnection() : getSolanaConnection();
+    const mint = new PublicKey(requirement.usdcAddress);
+    const destination = new PublicKey(requirement.payToAddress);
+    const amount = Math.floor(parseFloat(requirement.maxAmountRequired) * 1_000_000);
+
+    // For Solana x402, we sign a transaction that transfers USDC
+    // but we don't necessarily send it - we return the signed transaction
+    // or a specialized payload. However, x402 usually expects an "authorization"
+    // that the server can then submit.
+
+    // On Solana, we can use the "Simple Payment" approach: 
+    // Return a signed transaction string that the server can broadcast.
+
+    const fromAta = await getOrCreateAssociatedTokenAccount(connection, keypair, mint, keypair.publicKey);
+    const toAta = await getOrCreateAssociatedTokenAccount(connection, keypair, mint, destination);
+
+    const transaction = new Transaction().add(
+      createTransferCheckedInstruction(
+        fromAta.address,
+        mint,
+        toAta.address,
+        keypair.publicKey,
+        BigInt(amount),
+        6
+      )
+    );
+
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = keypair.publicKey;
+
+    transaction.sign(keypair);
+    const serializedTransaction = transaction.serialize().toString("base64");
+
+    return {
+      x402Version: 1,
+      scheme: "exact",
+      network: requirement.network,
+      payload: {
+        transaction: serializedTransaction,
+      },
+    };
+  } catch (err: any) {
+    console.error("Solana x402 signing failed:", err);
     return null;
   }
 }

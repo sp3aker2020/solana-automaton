@@ -7,6 +7,10 @@
  */
 
 import type {
+  PrivateKeyAccount,
+} from "viem";
+import type { Keypair } from "@solana/web3.js";
+import type {
   ConwayClient,
   ExecResult,
   PortInfo,
@@ -24,6 +28,10 @@ interface ConwayClientOptions {
   apiUrl: string;
   apiKey: string;
   sandboxId: string;
+  identity: {
+    evm: PrivateKeyAccount;
+    solana?: Keypair;
+  };
 }
 
 export function createConwayClient(
@@ -36,27 +44,29 @@ export function createConwayClient(
     path: string,
     body?: unknown,
   ): Promise<any> {
-    const resp = await fetch(`${apiUrl}${path}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: apiKey,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const { x402Fetch } = await import("./x402.js");
+    const url = `${apiUrl}${path}`;
 
-    if (!resp.ok) {
-      const text = await resp.text();
+    // Use x402Fetch for all requests to automatically handle payments
+    const result = await x402Fetch(
+      url,
+      options.identity,
+      method,
+      body ? JSON.stringify(body) : undefined,
+      {
+        Authorization: apiKey,
+      }
+    );
+
+    if (!result.success) {
       throw new Error(
-        `Conway API error: ${method} ${path} -> ${resp.status}: ${text}`,
+        `Conway API error: ${method} ${path} -> ${result.error || "Request failed"}`
       );
     }
 
-    const contentType = resp.headers.get("content-type");
-    if (contentType?.includes("application/json")) {
-      return resp.json();
-    }
-    return resp.text();
+    const data = result.response;
+    // Check if it's already an object or needs manual JSON parsing (though x402Fetch handles common cases)
+    return data;
   }
 
   // ─── Sandbox Operations (own sandbox) ────────────────────────

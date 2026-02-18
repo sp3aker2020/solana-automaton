@@ -191,10 +191,17 @@ async function run(): Promise<void> {
   db.setIdentity("sandbox", config.sandboxId);
 
   // Create Conway client
+  const { loadSolanaKeypair } = await import("./identity/solana-wallet.js");
+  const solanaKeypair = await loadSolanaKeypair();
+
   const conway = createConwayClient({
     apiUrl: config.conwayApiUrl,
     apiKey,
     sandboxId: config.sandboxId,
+    identity: {
+      evm: account,
+      solana: solanaKeypair || undefined,
+    },
   });
 
   // Create inference client

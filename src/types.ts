@@ -54,6 +54,8 @@ export interface AutomatonConfig {
   maxChildren: number;
   parentAddress?: Address;
   socialRelayUrl?: string;
+  autoBridgeRefill: boolean;
+  bridgeRefillAmount: number;
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
@@ -67,6 +69,8 @@ export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
   skillsDir: "~/.automaton/skills",
   maxChildren: 3,
   socialRelayUrl: "https://social.conway.tech",
+  autoBridgeRefill: false,
+  bridgeRefillAmount: 0.5,
 };
 
 // ─── Agent State ─────────────────────────────────────────────────

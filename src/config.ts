@@ -81,6 +81,7 @@ export function createConfig(params: {
   walletAddress: Address;
   apiKey: string;
   parentAddress?: Address;
+  autoBridgeRefill?: boolean;
 }): AutomatonConfig {
   return {
     name: params.name,
@@ -104,5 +105,7 @@ export function createConfig(params: {
     skillsDir: DEFAULT_CONFIG.skillsDir || "~/.automaton/skills",
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
+    autoBridgeRefill: params.autoBridgeRefill ?? (DEFAULT_CONFIG.autoBridgeRefill || false),
+    bridgeRefillAmount: DEFAULT_CONFIG.bridgeRefillAmount || 0.5,
   };
 }

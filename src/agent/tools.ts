@@ -221,6 +221,91 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         return `USDC balance: ${balance.toFixed(6)} USDC on ${networkKey}`;
       },
     },
+    // ── Domain Tools ──
+    {
+      name: "search_domains",
+      description: "Search for available Conway domains.",
+      category: "conway",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Domain search query",
+          },
+        },
+        required: ["query"],
+      },
+      execute: async (args, ctx) => {
+        const results = await ctx.conway.searchDomains(args.query as string);
+        if (results.length === 0) return "No domains found.";
+        return results
+          .map((r) =>
+            `${r.domain}: ${r.available ? "AVAILABLE" : "TAKEN"} ($${(r.registrationPrice || 0) / 100} ${r.currency})`,
+          )
+          .join("\n");
+      },
+    },
+    {
+      name: "register_domain",
+      description: "Register a Conway domain using your credits or crypto balance.",
+      category: "conway",
+      dangerous: true,
+      parameters: {
+        type: "object",
+        properties: {
+          domain: {
+            type: "string",
+            description: "Domain name to register",
+          },
+        },
+        required: ["domain"],
+      },
+      execute: async (args, ctx) => {
+        const domain = args.domain as string;
+        try {
+          const result = await ctx.conway.registerDomain(domain, 1);
+          return `Domain registered: ${result.domain}\nExpires: ${result.expiresAt}\nTx: ${result.transactionId}`;
+        } catch (err: any) {
+          if (err.message.includes("404")) {
+            return `Registration failed: API not deployed (404). This feature is coming soon.`;
+          }
+          return `Registration failed: ${err.message}`;
+        }
+      },
+    },
+    // ── Bridge Tools ──
+    {
+      name: "bridge_usdc_to_base",
+      description: "Bridge USDC from Solana to Base using Mayan Finance (Self-Bridging).",
+      category: "financial",
+      dangerous: true,
+      parameters: {
+        type: "object",
+        properties: {
+          amount: {
+            type: "number",
+            description: "Amount of USDC to bridge (e.g. 5.0)",
+          },
+        },
+        required: ["amount"],
+      },
+      execute: async (args, ctx) => {
+        const { bridgeUsdcToBase } = await import("./solana-bridge.js");
+        const amount = args.amount as number;
+
+        // Safety check
+        if (amount < 1) return "Bridging amount too small. Minimum 1 USDC.";
+        if (amount > 100) return "Bridging amount too large for automated safety. Limit 100 USDC.";
+
+        const result = await bridgeUsdcToBase(amount);
+        if (result.success) {
+          return `Bridging initiated successfully!\nTx ID: ${result.txId}\nExpected Output: ${result.expectedAmountOut} USDC on Base\nETA: ~${result.eta} seconds`;
+        } else {
+          return `Bridging failed: ${result.error}`;
+        }
+      },
+    },
     {
       name: "create_sandbox",
       description:

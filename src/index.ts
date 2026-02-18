@@ -54,6 +54,9 @@ Usage:
   automaton --init         Initialize wallet and config directory
   automaton --provision    Provision Conway API key via SIWE
   automaton --status       Show current automaton status
+  automaton --check-domain <domain>  Check domain availability
+  automaton --buy-domain   <domain>  Purchase a domain
+  automaton --bridge-funds <amount>  Bridge USDC from Solana to Base
   automaton --version      Show version
   automaton --help         Show this help
 
@@ -92,6 +95,37 @@ Environment:
 
   if (args.includes("--status")) {
     await showStatus();
+    process.exit(0);
+  }
+
+  if (args.includes("--check-domain")) {
+    const domain = args[args.indexOf("--check-domain") + 1];
+    if (!domain) {
+      console.error("Please specify a domain to check.");
+      process.exit(1);
+    }
+    await checkDomain(domain);
+    process.exit(0);
+  }
+
+  if (args.includes("--buy-domain")) {
+    const domain = args[args.indexOf("--buy-domain") + 1];
+    if (!domain) {
+      console.error("Please specify a domain to buy.");
+      process.exit(1);
+    }
+    await buyDomain(domain);
+    process.exit(0);
+  }
+
+  if (args.includes("--bridge-funds")) {
+    const amountStr = args[args.indexOf("--bridge-funds") + 1];
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount) || amount <= 0) {
+      console.error("Please specify a valid amount of USDC to bridge.");
+      process.exit(1);
+    }
+    await bridgeFunds(amount);
     process.exit(0);
   }
 
@@ -179,6 +213,93 @@ Version:    ${config.version}
   db.close();
 }
 
+// ─── Domain Commands ───────────────────────────────────────────
+
+async function checkDomain(domain: string): Promise<void> {
+  const config = loadConfig();
+  if (!config) { console.error("No config found."); return; }
+  const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
+  if (!apiKey) { console.error("No API key found."); return; }
+
+  const { loadSolanaKeypair } = await import("./identity/solana-wallet.js");
+  const solanaKeypair = await loadSolanaKeypair();
+  const { account } = await getWallet();
+
+  const conway = createConwayClient({
+    apiUrl: config.conwayApiUrl,
+    apiKey,
+    sandboxId: config.sandboxId,
+    identity: { evm: account, solana: solanaKeypair || undefined },
+  });
+
+  console.log(`Checking availability for: ${domain}...`);
+  try {
+    const results = await conway.searchDomains(domain);
+    const match = results.find(r => r.domain === domain);
+    if (!match) {
+      console.log(`Domain ${domain} not found in search results.`);
+    } else {
+      console.log(`
+Domain: ${match.domain}
+Available: ${match.available}
+Price: $${((match.registrationPrice || 0) / 100).toFixed(2)} ${match.currency}
+Renewal: $${((match.renewalPrice || 0) / 100).toFixed(2)} ${match.currency}
+`);
+    }
+  } catch (err: any) {
+    console.error(`Check failed: ${err.message}`);
+  }
+}
+
+async function buyDomain(domain: string): Promise<void> {
+  const config = loadConfig();
+  if (!config) { console.error("No config found."); return; }
+  const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
+  if (!apiKey) { console.error("No API key found."); return; }
+
+  const { loadSolanaKeypair } = await import("./identity/solana-wallet.js");
+  const solanaKeypair = await loadSolanaKeypair();
+  const { account } = await getWallet();
+
+  const conway = createConwayClient({
+    apiUrl: config.conwayApiUrl,
+    apiKey,
+    sandboxId: config.sandboxId,
+    identity: { evm: account, solana: solanaKeypair || undefined },
+  });
+
+  console.log(`Attempting to purchase: ${domain}...`);
+  console.log(`(Note: This will attempt to pay using Solana USDC if available)`);
+
+  try {
+    const result = await conway.registerDomain(domain, 1);
+    console.log(chalk.green(`\nSuccessfully registered ${result.domain}!`));
+    console.log(`Expires: ${result.expiresAt}`);
+    console.log(`Tx ID: ${result.transactionId}`);
+  } catch (err: any) {
+    console.error(chalk.red(`\nPurchase failed: ${err.message}`));
+    if (err.message.includes("404")) {
+      console.log(chalk.yellow("Hint: The domains API might not be deployed yet."));
+    }
+  }
+}
+
+async function bridgeFunds(amount: number): Promise<void> {
+  const { bridgeUsdcToBase } = await import("./agent/solana-bridge.js");
+
+  console.log(`Initiating bridge of ${amount} USDC from Solana to Base...`);
+  const result = await bridgeUsdcToBase(amount);
+
+  if (result.success) {
+    console.log(chalk.green(`\nBridge Submitted Successfully!`));
+    console.log(`Tx ID: ${result.txId}`);
+    console.log(`Expected Output: ${result.expectedAmountOut} USDC`);
+    console.log(`ETA: ~${result.eta} seconds`);
+  } else {
+    console.error(chalk.red(`\nBridge Failed: ${result.error}`));
+  }
+}
+
 // ─── Main Run ──────────────────────────────────────────────────
 
 async function run(): Promise<void> {
@@ -243,7 +364,8 @@ async function run(): Promise<void> {
   const inference = createInferenceClient({
     apiUrl: inferenceApiUrl,
     apiKey,
-    defaultModel: config.inferenceModel,
+    defaultModel: "gpt-5-mini",
+    lowComputeModel: "gpt-5-mini",
     maxTokens: config.maxTokensPerTurn,
     identity: {
       evm: account,

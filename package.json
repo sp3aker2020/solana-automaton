@@ -43,6 +43,7 @@
     "clean": "rm -rf dist && pnpm -r clean"
   },
   "dependencies": {
+    "@mayanfinance/swap-sdk": "^12.2.5",
     "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
     "@metaplex-foundation/umi": "^1.5.1",
     "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",

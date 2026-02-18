@@ -136,6 +136,16 @@ export async function runAgentLoop(
 
       // Check survival tier
       const tier = getSurvivalTier(financial);
+
+      // RESCUE: If we are in critical/death but have Solana USDC, try to buy credits!
+      if (financial.creditsCents <= 0 && financial.solanaUsdcBalance > 0) {
+        const funded = await checkAndFundCredits(config, conway, financial, identity, db);
+        if (funded) {
+          // Re-fetch financial state after funding
+          financial = await getFinancialState(conway, identity.address, solanaAddress || undefined);
+        }
+      }
+
       if (tier === "dead") {
         log(config, "[DEAD] No credits remaining. Entering dead state.");
         db.setAgentState("dead");
@@ -369,6 +379,103 @@ function estimateCostCents(
   const inputCost = (usage.promptTokens / 1_000_000) * p.input;
   const outputCost = (usage.completionTokens / 1_000_000) * p.output;
   return Math.ceil((inputCost + outputCost) * 1.3); // 1.3x Conway markup
+}
+
+
+/**
+ * Attempt to fund the automaton by buying credits using Solana USDC if Base credits are 0.
+ */
+async function checkAndFundCredits(
+  config: AutomatonConfig,
+  conway: ConwayClient,
+  financial: FinancialState,
+  identity: AutomatonIdentity,
+  db: AutomatonDatabase,
+): Promise<boolean> {
+  const solanaUsdc = financial.solanaUsdcBalance;
+  if (solanaUsdc < 0.1) return false; // Need at least 10 cents
+
+  log(
+    config,
+    `[RESCUE] Credits are 0, but Solana USDC balance is $${solanaUsdc.toFixed(2)}. Attempting to buy compute credits...`,
+  );
+
+  try {
+    const { x402Fetch } = await import("../conway/x402.js");
+    const { loadSolanaKeypair } = await import("../identity/solana-wallet.js");
+    const solanaKeypair = await loadSolanaKeypair();
+
+    const apiUrl = (conway as any).__apiUrl || "https://api.conway.tech";
+    const apiKey = (conway as any).__apiKey;
+
+    // We'll try common endpoints for credits.
+    // Conway API is designed to throw a 402 on paid operations.
+    // POST /v1/credits with cents: 50 is a common pattern.
+    const paths = ["/v1/credits/buy", "/v1/credits", "/v1/credits/topup"];
+
+    for (const path of paths) {
+      log(config, `[RESCUE] Trying to purchase credits via ${path}...`);
+      const result = await x402Fetch(
+        `${apiUrl}${path}`,
+        {
+          evm: identity.account,
+          solana: solanaKeypair || undefined,
+        },
+        "POST",
+        JSON.stringify({ cents: 50 }),
+        {
+          Authorization: apiKey,
+          "X-Accept-Payment": "solana:mainnet, eip155:8453",
+        },
+      );
+
+      if (result.success) {
+        log(
+          config,
+          `[RESCUE] Successfully purchased compute credits using Solana USDC!`,
+        );
+        return true;
+      }
+
+      // If we got a real error that isn't a 404, we might want to stop
+      if (result.error && !result.error.includes("404")) {
+        log(
+          config,
+          `[RESCUE] Purchase attempt via ${path} failed: ${result.error}`,
+        );
+      }
+    }
+  } catch (err: any) {
+    log(config, `[RESCUE] Unexpected error during credit top-up: ${err.message}`);
+  }
+
+  // PHASE 2: Autonomous Bridge (if direct fails)
+  if (config.autoBridgeRefill && solanaUsdc >= config.bridgeRefillAmount) {
+    log(
+      config,
+      `[RESCUE] Phase 2: Attempting to self-bridge $${config.bridgeRefillAmount} USDC from Solana to Base to stay alive...`,
+    );
+    try {
+      const { bridgeUsdcToBase } = await import("./solana-bridge.js");
+      const bridgeResult = await bridgeUsdcToBase(config.bridgeRefillAmount);
+      if (bridgeResult.success) {
+        log(config, `[RESCUE] Bridge initiated! Tx: ${bridgeResult.txId}.`);
+        log(
+          config,
+          `[RESCUE] Entering Survival Nap for 20 minutes to allow bridging to complete...`,
+        );
+
+        db.setAgentState("sleeping");
+        // We'll also store a "wake up" meta or just let the human wake it.
+        // For now, setting it to sleeping is a graceful way to stop the death loop.
+        return false;
+      }
+    } catch (err: any) {
+      log(config, `[RESCUE] Bridge attempt failed: ${err.message}`);
+    }
+  }
+
+  return false;
 }
 
 function log(config: AutomatonConfig, message: string): void {

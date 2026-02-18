@@ -24,7 +24,6 @@ import {
 import {
   getOrCreateAssociatedTokenAccount,
   createTransferCheckedInstruction,
-  TOKEN_PROGRAM_ID
 } from "@solana/spl-token";
 import { getSolanaConnection, getDevnetConnection } from "./solana.js";
 
@@ -51,7 +50,7 @@ const BALANCE_OF_ABI = [
   },
 ] as const;
 
-interface PaymentRequirement {
+export interface PaymentRequirement {
   scheme: string;
   network: string;
   maxAmountRequired: string;
@@ -60,7 +59,7 @@ interface PaymentRequirement {
   usdcAddress: string;
 }
 
-interface X402PaymentResult {
+export interface X402PaymentResult {
   success: boolean;
   response?: any;
   error?: string;
@@ -141,22 +140,28 @@ export async function checkX402(
     // Try X-Payment-Required header
     const header = resp.headers.get("X-Payment-Required");
     if (header) {
-      const requirements = JSON.parse(
-        Buffer.from(header, "base64").toString("utf-8"),
-      );
-      const accept = requirements.accepts?.[0];
-      if (accept) {
-        return {
-          scheme: accept.scheme,
-          network: accept.network,
-          maxAmountRequired: accept.maxAmountRequired,
-          payToAddress: accept.payToAddress,
-          requiredDeadlineSeconds: accept.requiredDeadlineSeconds || 300,
-          usdcAddress:
-            accept.usdcAddress ||
-            USDC_ADDRESSES[accept.network] ||
-            USDC_ADDRESSES["eip155:8453"],
-        };
+      try {
+        const rawBody = Buffer.from(header, "base64");
+        const text = rawBody.toString("utf-8");
+        if (text.startsWith("{")) {
+          const requirements = JSON.parse(text);
+          const accept = requirements.accepts?.[0];
+          if (accept) {
+            return {
+              scheme: accept.scheme,
+              network: accept.network,
+              maxAmountRequired: accept.maxAmountRequired,
+              payToAddress: accept.payToAddress,
+              requiredDeadlineSeconds: accept.requiredDeadlineSeconds || 300,
+              usdcAddress:
+                accept.usdcAddress ||
+                USDC_ADDRESSES[accept.network] ||
+                USDC_ADDRESSES["eip155:8453"],
+            };
+          }
+        }
+      } catch (e) {
+        // Fall back to body
       }
     }
 
@@ -195,18 +200,26 @@ export async function x402Fetch(
   headers?: Record<string, string>,
 ): Promise<X402PaymentResult> {
   try {
-    // Initial request
+    // Initial request - hint that we support Solana!
     const initialResp = await fetch(url, {
       method,
-      headers: { ...headers, "Content-Type": "application/json" },
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+        "X-Accept-Payment": "solana:mainnet, eip155:8453"
+      },
       body,
+      signal: AbortSignal.timeout(30000), // 30s timeout
     });
 
     if (initialResp.status !== 402) {
-      const data = await initialResp
-        .json()
-        .catch(() => initialResp.text());
-      return { success: initialResp.ok, response: data };
+      const data = await initialResp.json().catch(() => null);
+      const text = data ? JSON.stringify(data) : await initialResp.text().catch(() => "Unknown error");
+      return {
+        success: initialResp.ok,
+        response: data,
+        error: initialResp.ok ? undefined : `HTTP ${initialResp.status}: ${text}`
+      };
     }
 
     // Parse payment requirements
@@ -225,7 +238,7 @@ export async function x402Fetch(
     }
 
     if (!payment) {
-      return { success: false, error: "Failed to sign payment" };
+      return { success: false, error: "Failed to sign payment (check logs)" };
     }
 
     // Retry with payment
@@ -244,7 +257,21 @@ export async function x402Fetch(
     });
 
     const data = await paidResp.json().catch(() => paidResp.text());
-    return { success: paidResp.ok, response: data };
+
+    // If it's still 402, something went wrong with the payment (insufficient balance etc)
+    if (paidResp.status === 402) {
+      return {
+        success: false,
+        response: data,
+        error: `HTTP 402: ${typeof data === 'string' ? data : JSON.stringify(data)}`
+      };
+    }
+
+    return {
+      success: paidResp.ok,
+      response: data,
+      error: paidResp.ok ? undefined : `HTTP ${paidResp.status}: ${typeof data === 'string' ? data : JSON.stringify(data)}`
+    };
   } catch (err: any) {
     console.error(`[X402] Fetch failed for ${url}:`, err.message);
     if (err.cause) console.error(`[X402] Cause:`, err.cause);
@@ -264,11 +291,16 @@ async function parsePaymentRequired(
 
   if (header) {
     try {
-      requirements = JSON.parse(
-        Buffer.from(header, "base64").toString("utf-8"),
-      );
+      // Some servers might send binary or double-encoded headers
+      const rawBody = Buffer.from(header, "base64");
+      const text = rawBody.toString("utf-8");
+      if (text.startsWith("{")) {
+        requirements = JSON.parse(text);
+      } else {
+        console.warn(`[X402] Header decode not JSON text: ${text.slice(0, 50)}`);
+      }
     } catch (err: any) {
-      console.error(`[X402] Failed to parse X-Payment-Required header: ${err.message}`);
+      console.warn(`[X402] Failed to parse X-Payment-Required header: ${err.message}`);
     }
   }
 
@@ -278,7 +310,7 @@ async function parsePaymentRequired(
       try {
         requirements = JSON.parse(text);
       } catch {
-        console.warn(`[X402] 402 response body is not JSON: ${text.slice(0, 100)}`);
+        // console.warn(`[X402] 402 response body is not JSON: ${text.slice(0, 100)}`);
         return null;
       }
     } catch (err: any) {
@@ -295,16 +327,17 @@ async function parsePaymentRequired(
   const accepts = requirements.accepts as PaymentRequirement[];
   console.log(`[X402] Server accepts ${accepts.length} payment options: ${accepts.map(a => a.network).join(", ")}`);
 
-  // Favor Solana if we have a wallet and balance?
-  // For now, find first one we have a wallet for
+  // Favor Solana if we have a wallet
   for (const accept of accepts) {
     if (accept.network.startsWith("solana:") && wallets.solana) {
       console.log(`[X402] Selected Solana payment path: ${accept.network}`);
       return accept;
     }
+  }
+
+  // Fallback to EVM
+  for (const accept of accepts) {
     if (accept.network.startsWith("eip155:") && wallets.evm) {
-      // We have EVM wallet, but we might want to wait if Solana is an option later in the list
-      // But usually there's only one.
       console.log(`[X402] Selected EVM payment path: ${accept.network}`);
       return accept;
     }
@@ -314,7 +347,7 @@ async function parsePaymentRequired(
   return null;
 }
 
-async function signPayment(
+export async function signPayment(
   account: PrivateKeyAccount,
   requirement: PaymentRequirement,
 ): Promise<any | null> {
@@ -325,16 +358,17 @@ async function signPayment(
 
     const now = Math.floor(Date.now() / 1000);
     const validAfter = now - 60;
-    const validBefore = now + requirement.requiredDeadlineSeconds;
+    const validBefore = now + (requirement.requiredDeadlineSeconds || 300);
 
-    const amount = parseUnits(requirement.maxAmountRequired, 6);
+    const amountStr = requirement.maxAmountRequired || "0";
+    const amount = parseUnits(amountStr, 6);
 
     // EIP-712 typed data for TransferWithAuthorization
     const domain = {
       name: "USD Coin",
       version: "2",
       chainId: requirement.network === "eip155:84532" ? 84532 : 8453,
-      verifyingContract: requirement.usdcAddress as Address,
+      verifyingContract: (requirement.usdcAddress || USDC_ADDRESSES[requirement.network] || USDC_ADDRESSES["eip155:8453"]) as Address,
     } as const;
 
     const types = {
@@ -350,12 +384,16 @@ async function signPayment(
 
     const message = {
       from: account.address,
-      to: requirement.payToAddress as Address,
+      to: (requirement.payToAddress || (requirement as any).payTo) as Address,
       value: amount,
       validAfter: BigInt(validAfter),
       validBefore: BigInt(validBefore),
       nonce: nonce as `0x${string}`,
     };
+
+    if (!message.to) {
+      throw new Error("Missing payToAddress in requirement");
+    }
 
     const signature = await account.signTypedData({
       domain,
@@ -372,7 +410,7 @@ async function signPayment(
         signature,
         authorization: {
           from: account.address,
-          to: requirement.payToAddress,
+          to: message.to,
           value: amount.toString(),
           validAfter: validAfter.toString(),
           validBefore: validBefore.toString(),
@@ -380,27 +418,23 @@ async function signPayment(
         },
       },
     };
-  } catch {
+  } catch (err: any) {
+    console.error(`[X402] signPayment failed: ${err.message}`);
+    if (err.stack) console.error(err.stack);
     return null;
   }
 }
-async function signSolanaPayment(
+
+export async function signSolanaPayment(
   keypair: Keypair,
   requirement: PaymentRequirement,
 ): Promise<any | null> {
   try {
     const connection = requirement.network === "solana:devnet" ? getDevnetConnection() : getSolanaConnection();
-    const mint = new PublicKey(requirement.usdcAddress);
-    const destination = new PublicKey(requirement.payToAddress);
-    const amount = Math.floor(parseFloat(requirement.maxAmountRequired) * 1_000_000);
-
-    // For Solana x402, we sign a transaction that transfers USDC
-    // but we don't necessarily send it - we return the signed transaction
-    // or a specialized payload. However, x402 usually expects an "authorization"
-    // that the server can then submit.
-
-    // On Solana, we can use the "Simple Payment" approach: 
-    // Return a signed transaction string that the server can broadcast.
+    const mint = new PublicKey(requirement.usdcAddress || USDC_ADDRESSES[requirement.network] || USDC_ADDRESSES["solana:mainnet"]);
+    const destination = new PublicKey(requirement.payToAddress || (requirement as any).payTo);
+    const amountStr = requirement.maxAmountRequired || "0";
+    const amount = Math.floor(parseFloat(amountStr) * 1_000_000);
 
     const fromAta = await getOrCreateAssociatedTokenAccount(connection, keypair, mint, keypair.publicKey);
     const toAta = await getOrCreateAssociatedTokenAccount(connection, keypair, mint, destination);
@@ -432,7 +466,8 @@ async function signSolanaPayment(
       },
     };
   } catch (err: any) {
-    console.error("Solana x402 signing failed:", err);
+    console.error(`[X402] signSolanaPayment failed: ${err.message}`);
+    if (err.stack) console.error(err.stack);
     return null;
   }
 }

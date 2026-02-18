@@ -77,6 +77,13 @@ export async function promptSolanaAddress(label: string): Promise<string> {
   }
 }
 
+export async function promptConfirm(label: string, defaultValue: boolean = true): Promise<boolean> {
+  const suffix = defaultValue ? " (Y/n)" : " (y/N)";
+  const value = await ask(chalk.white(`  → ${label}${suffix}: `));
+  if (!value) return defaultValue;
+  return /^y(es)?$/i.test(value);
+}
+
 export function closePrompts(): void {
   if (rl) {
     rl.close();

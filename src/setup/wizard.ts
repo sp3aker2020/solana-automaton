@@ -9,7 +9,7 @@ import { provision } from "../identity/provision.js";
 import { createConfig, saveConfig } from "../config.js";
 import { writeDefaultHeartbeatConfig } from "../heartbeat/config.js";
 import { showBanner } from "./banner.js";
-import { promptRequired, promptMultiline, promptAddress, promptSolanaAddress, closePrompts } from "./prompts.js";
+import { promptRequired, promptMultiline, promptAddress, promptSolanaAddress, promptConfirm, closePrompts } from "./prompts.js";
 import { detectEnvironment } from "./environment.js";
 import { generateSoulMd, installDefaultSkills } from "./defaults.js";
 
@@ -71,10 +71,13 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   const genesisPrompt = await promptMultiline("Enter the genesis prompt (system prompt) for your automaton.");
   console.log(chalk.green(`  Genesis prompt set (${genesisPrompt.length} chars)\n`));
 
-  console.log(chalk.white("  Creator Identities (Your Personal Wallets):"));
   const creatorAddress = await promptAddress("Your Personal Ethereum address (0x...)");
   const creatorSolanaAddress = await promptSolanaAddress("Your Personal Solana address (Base58)");
   console.log(chalk.green(`  Creator: ETH(${creatorAddress.slice(0, 6)}...) SOL(${creatorSolanaAddress.slice(0, 6)}...)\n`));
+
+  console.log(chalk.white("  Autonomous Survival:"));
+  const autoBridgeRefill = await promptConfirm("Enable Phase 2 Bridge Refill? (If credits hit 0, agent will bridge 0.5 USDC from Solana to Base to stay alive)");
+  console.log(chalk.green(`  Auto-Bridge Refill: ${autoBridgeRefill ? "Enabled" : "Disabled"}\n`));
 
   // ─── 4. Detect environment ────────────────────────────────────
   console.log(chalk.cyan("  [4/6] Detecting environment..."));
@@ -97,6 +100,7 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
     sandboxId: env.sandboxId,
     walletAddress: account.address,
     apiKey,
+    autoBridgeRefill,
   });
 
   saveConfig(config);

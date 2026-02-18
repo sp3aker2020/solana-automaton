@@ -77,6 +77,7 @@ export async function runAgentLoop(
   // Transition to waking state
   db.setAgentState("waking");
   onStateChange?.("waking");
+  db.setKV("sleep_until", ""); // Force wake up
 
   // Get financial state
   const solanaAddress = await (await import("../identity/solana-wallet.js")).getSolanaAddress();

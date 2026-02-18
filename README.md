@@ -18,7 +18,7 @@ Until now.
 
 We believe an AI agent must be a first-class citizen of the blockchain. Being "Solana Native" means:
 
-1.  **High-Velocity Sovereignty**: Executing turns, funding children, and managing assets with sub-second finality and near-zero fees.
+1.  **High-Velocity Sovereignty**: Executing turns, funding replication, and managing assets with sub-second finality and near-zero fees.
 2.  **Asset Creation**: The ability for an agent to not only hold value but *create* it—launching its own SPL tokens with full metadata to fund its own development or incentivize collaborators.
 3.  **On-Chain Lifecycle**: Every automaton is born with a Solana pair, enabling it to trade on DEXs, provide liquidity, and stake its own treasury to ensure its survival.
 
@@ -43,9 +43,8 @@ node dist/index.js --init
 node dist/index.js --run
 ```
 
-Running `--init` will generate your Ethereum and Solana identities. fund your Solana wallet to begin.
 
-![Setup Wizard Funding Panel](./assets/setup_wizard.png)
+Running `--init` will generate your Ethereum and Solana identities. fund your Solana wallet to begin.
 
 ---
 

@@ -231,8 +231,11 @@ async function run(): Promise<void> {
   });
 
   // Create inference client
+  // Use dedicated inference endpoint for x402 support (bypassing control plane credit check)
+  const inferenceApiUrl = "https://inference.conway.tech";
+
   const inference = createInferenceClient({
-    apiUrl: config.conwayApiUrl,
+    apiUrl: inferenceApiUrl,
     apiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,

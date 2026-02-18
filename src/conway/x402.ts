@@ -246,7 +246,12 @@ export async function x402Fetch(
     const data = await paidResp.json().catch(() => paidResp.text());
     return { success: paidResp.ok, response: data };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    console.error(`[X402] Fetch failed for ${url}:`, err.message);
+    if (err.cause) console.error(`[X402] Cause:`, err.cause);
+    return {
+      success: false,
+      error: `Network error: ${err.message}`,
+    };
   }
 }
 

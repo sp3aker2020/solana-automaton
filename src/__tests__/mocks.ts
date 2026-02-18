@@ -276,7 +276,8 @@ export function createTestConfig(
     maxChildren: 3,
     socialRelayUrl: "https://social.conway.tech",
     autoBridgeRefill: false,
-    bridgeRefillAmount: 0.5,
+    bridgeRefillAmount: 15.0,
+    bridgeProvider: "mayan",
     ...overrides,
   };
 }

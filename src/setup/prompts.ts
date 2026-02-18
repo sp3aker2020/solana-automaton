@@ -84,6 +84,16 @@ export async function promptConfirm(label: string, defaultValue: boolean = true)
   return /^y(es)?$/i.test(value);
 }
 
+export async function promptSelect<T extends string>(label: string, options: T[], defaultOption: T): Promise<T> {
+  const suffix = ` (${options.join("/")}) [default: ${defaultOption}]`;
+  const value = await ask(chalk.white(`  → ${label}${suffix}: `));
+  if (!value) return defaultOption;
+  const match = options.find(o => o.toLowerCase() === value.toLowerCase());
+  if (match) return match;
+  console.log(chalk.yellow(`  Invalid option. Please choose from: ${options.join(", ")}`));
+  return promptSelect(label, options, defaultOption);
+}
+
 export function closePrompts(): void {
   if (rl) {
     rl.close();

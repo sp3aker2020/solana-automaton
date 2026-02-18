@@ -56,6 +56,7 @@ export interface AutomatonConfig {
   socialRelayUrl?: string;
   autoBridgeRefill: boolean;
   bridgeRefillAmount: number;
+  bridgeProvider?: "mayan" | "debridge";
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {

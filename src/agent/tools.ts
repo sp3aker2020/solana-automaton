@@ -277,7 +277,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
     // ── Bridge Tools ──
     {
       name: "bridge_usdc_to_base",
-      description: "Bridge USDC from Solana to Base using Mayan Finance (Self-Bridging).",
+      description: "Bridge USDC from Solana to Base to stay alive (automated selection of Mayan or deBridge).",
       category: "financial",
       dangerous: true,
       parameters: {
@@ -291,7 +291,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["amount"],
       },
       execute: async (args, ctx) => {
-        const { bridgeUsdcToBase } = await import("./solana-bridge.js");
+        const { bridgeUsdcToBase } = await import("./bridge/index.js");
         const amount = args.amount as number;
 
         // Safety check

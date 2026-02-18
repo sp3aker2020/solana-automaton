@@ -76,8 +76,16 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   console.log(chalk.green(`  Creator: ETH(${creatorAddress.slice(0, 6)}...) SOL(${creatorSolanaAddress.slice(0, 6)}...)\n`));
 
   console.log(chalk.white("  Autonomous Survival:"));
-  const autoBridgeRefill = await promptConfirm("Enable Phase 2 Bridge Refill? (If credits hit 0, agent will bridge 15 USDC from Solana to Base to stay alive. NOTE: Bridge minimum is ~12 USDC)");
-  console.log(chalk.green(`  Auto-Bridge Refill: ${autoBridgeRefill ? "Enabled" : "Disabled"}\n`));
+  const autoBridgeRefill = await promptConfirm("Enable Phase 2 Bridge Refill?");
+  let bridgeProvider: "mayan" | "debridge" = "mayan";
+  if (autoBridgeRefill) {
+    console.log(chalk.dim("    Choose a bridge provider:"));
+    console.log(chalk.dim("    - mayan:    High reliability, ~$15 USDC minimum refill."));
+    console.log(chalk.dim("    - debridge: High efficiency, ~$1-2 USDC minimum refill."));
+    bridgeProvider = await (import("./prompts.js")).then(m => m.promptSelect("Select provider", ["mayan", "debridge"], "mayan"));
+  }
+  const refillAmount = bridgeProvider === "debridge" ? 2.0 : 15.0;
+  console.log(chalk.green(`  Auto-Bridge Refill: ${autoBridgeRefill ? `Enabled (${bridgeProvider}, ${refillAmount} USDC)` : "Disabled"}\n`));
 
   // ─── 4. Detect environment ────────────────────────────────────
   console.log(chalk.cyan("  [4/6] Detecting environment..."));
@@ -101,6 +109,7 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
     walletAddress: account.address,
     apiKey,
     autoBridgeRefill,
+    bridgeProvider,
   });
 
   saveConfig(config);

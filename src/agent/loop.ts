@@ -460,7 +460,7 @@ async function checkAndFundCredits(
       `[RESCUE] Phase 2: Attempting to self-bridge $${config.bridgeRefillAmount} USDC from Solana to Base to stay alive...`,
     );
     try {
-      const { bridgeUsdcToBase } = await import("./solana-bridge.js");
+      const { bridgeUsdcToBase } = await import("./bridge/index.js");
       const bridgeResult = await bridgeUsdcToBase(config.bridgeRefillAmount);
       if (bridgeResult.success) {
         log(config, `[RESCUE] Bridge initiated! Tx: ${bridgeResult.txId}.`);

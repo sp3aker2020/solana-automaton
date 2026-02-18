@@ -285,7 +285,7 @@ async function buyDomain(domain: string): Promise<void> {
 }
 
 async function bridgeFunds(amount: number): Promise<void> {
-  const { bridgeUsdcToBase } = await import("./agent/solana-bridge.js");
+  const { bridgeUsdcToBase } = await import("./agent/bridge/index.js");
 
   console.log(`Initiating bridge of ${amount} USDC from Solana to Base...`);
   const result = await bridgeUsdcToBase(amount);

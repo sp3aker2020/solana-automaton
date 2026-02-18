@@ -66,3 +66,19 @@ export async function loadSolanaKeypair(): Promise<Keypair | null> {
 export function solanaWalletExists(): boolean {
     return fs.existsSync(SOLANA_WALLET_FILE);
 }
+
+/**
+ * Get Solana USDC Balance.
+ */
+export async function getSolanaBalance(address: string): Promise<number> {
+    const { getSolanaConnection } = await import("../conway/solana.js");
+    const { PublicKey } = await import("@solana/web3.js");
+    const connection = getSolanaConnection();
+    const pubkey = new PublicKey(address);
+    // Find USDC mint
+    const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+    const response = await connection.getParsedTokenAccountsByOwner(pubkey, { mint: USDC_MINT });
+    if (response.value.length === 0) return 0;
+    const balance = response.value[0].account.data.parsed.info.tokenAmount.uiAmount;
+    return balance || 0;
+}

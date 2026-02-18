@@ -135,6 +135,11 @@ Environment:
     process.exit(0);
   }
 
+  if (args.includes("--dashboard") || args.includes("--web")) {
+    const { startDashboardServer } = await import("./web/server.js");
+    startDashboardServer();
+  }
+
   if (args.includes("--run")) {
     await run();
     return;
@@ -143,6 +148,7 @@ Environment:
   // Default: show help
   console.log('Run "automaton --help" for usage information.');
   console.log('Run "automaton --run" to start the automaton.');
+  console.log('Run "automaton --dashboard" to launch the Sovereign Dashboard UI.');
 }
 
 // ─── Status Command ────────────────────────────────────────────

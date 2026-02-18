@@ -49,6 +49,34 @@ Running `--init` will generate your Ethereum and Solana identities. fund your So
 
 ---
 
+## Local Development & Testing
+
+If you are encountering errors like `ENOTEMPTY` or `Missing script: "build"`, you are likely in the wrong directory. Ensure you are inside the `solana-automaton` folder.
+
+1.  **Navigate to Project Root**:
+    ```bash
+    cd solana-automaton
+    ```
+
+2.  **Install & Build**:
+    ```bash
+    npm install
+    npm run build
+    ```
+
+3.  **Initialize**:
+    ```bash
+    node dist/index.js --init
+    ```
+
+4.  **Test Solana Tools**:
+    ```bash
+    node dist/index.js --run
+    ```
+    *Command the agent: "Check my SOL balance on devnet" or "Launch a token on devnet".*
+
+---
+
 ## How It Works
 
 Every automaton runs a continuous loop: **Think → Act → Observe → Repeat.**

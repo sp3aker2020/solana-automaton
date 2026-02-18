@@ -12,6 +12,72 @@
 </head>
 
 <body>
+    <!-- Setup Wizard Overlay -->
+    <div id="setup-wizard" class="modal-overlay hidden">
+        <div class="modal-content glass-container setup-wizard-card">
+            <div class="wizard-header">
+                <h2>AGENT INITIALIZATION</h2>
+                <div class="wizard-steps-indicator">
+                    <span class="dot active"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+            </div>
+
+            <div id="wizard-step-1" class="wizard-step">
+                <h3>Identity Forge</h3>
+                <p class="step-desc">Specify your agent's name and its core genesis prompt.</p>
+                <div class="input-group">
+                    <label>Agent Name</label>
+                    <input type="text" id="setup-name" placeholder="e.g. SOL-ARIS">
+                </div>
+                <div class="input-group">
+                    <label>Genesis Prompt</label>
+                    <textarea id="setup-genesis"
+                        placeholder="Define the agent's purpose, personality and goals..."></textarea>
+                </div>
+                <button class="btn btn-primary" onclick="wizardNext()">CONTINUE</button>
+            </div>
+
+            <div id="wizard-step-2" class="wizard-step hidden">
+                <h3>Survival Calibration</h3>
+                <p class="step-desc">Configure the autonomous bridging mechanism.</p>
+                <div class="input-group">
+                    <label>Bridge Provider</label>
+                    <select id="setup-provider">
+                        <option value="debridge">deBridge DLN (High Efficiency, $2 min)</option>
+                        <option value="mayan">Mayan Finance (High Reliability, $15 min)</option>
+                    </select>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="setup-auto-refill" checked>
+                    <label for="setup-auto-refill">Enable Phase 2 Autonomous Bridge Refill</label>
+                </div>
+                <div class="wizard-actions">
+                    <button class="btn btn-secondary" onclick="wizardPrev()">BACK</button>
+                    <button class="btn btn-primary" onclick="wizardNext()">CONTINUE</button>
+                </div>
+            </div>
+
+            <div id="wizard-step-3" class="wizard-step hidden">
+                <h3>Ownership Link</h3>
+                <p class="step-desc">Link your Solana address for credit top-ups.</p>
+                <div class="input-group">
+                    <label>Your Solana Address (Creator)</label>
+                    <input type="text" id="setup-creator-sol" placeholder="Enter your Solana Wallet address">
+                </div>
+                <div class="input-group">
+                    <label>Your Ethereum Address</label>
+                    <input type="text" id="setup-creator-eth" placeholder="Enter your EVM Wallet address">
+                </div>
+                <div class="wizard-actions">
+                    <button class="btn btn-secondary" onclick="wizardPrev()">BACK</button>
+                    <button id="launch-btn" class="btn btn-glow" onclick="submitSetup()">LAUNCH AGENT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="glass-container">
         <!-- Banner -->
         <div class="dashboard-banner">

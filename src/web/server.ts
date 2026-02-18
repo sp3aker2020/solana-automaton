@@ -4,12 +4,16 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { loadConfig } from "../config.js";
-import { getSolanaAddress, getSolanaBalance } from "../identity/solana-wallet.js";
+import { loadConfig, saveConfig, createConfig } from "../config.js";
+import { getSolanaAddress, getSolanaBalance, getSolanaWallet } from "../identity/solana-wallet.js";
 import { getWallet } from "../identity/wallet.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let lastStatus: any = null;
+let lastFetchTime = 0;
+const CACHE_DURATION = 60000; // 60 seconds
 
 export function startDashboardServer(port: number = 18888) {
     const app = express();
@@ -36,7 +40,23 @@ export function startDashboardServer(port: number = 18888) {
     app.get("/api/status", async (req, res) => {
         try {
             const config = loadConfig();
-            if (!config) throw new Error("Config not loaded");
+
+            // If no config, return setup_required state
+            if (!config) {
+                return res.json({
+                    success: true,
+                    data: {
+                        state: "setup_required",
+                        name: "Sovereign Automaton",
+                        version: "0.1.0"
+                    }
+                });
+            }
+
+            const now = Date.now();
+            if (lastStatus && (now - lastFetchTime < CACHE_DURATION)) {
+                return res.json(lastStatus);
+            }
 
             const dbPath = config.dbPath.replace("~", process.env.HOME || "");
             const { createDatabase } = await import("../state/database.js");
@@ -79,7 +99,7 @@ export function startDashboardServer(port: number = 18888) {
 
             db.close();
 
-            res.json({
+            const status = {
                 success: true,
                 data: {
                     name: config.name || "Unnamed Agent",
@@ -99,6 +119,68 @@ export function startDashboardServer(port: number = 18888) {
                         conwayCredits: conwayCredits,
                     },
                     version: config.version || "0.1.0"
+                }
+            };
+
+            lastStatus = status;
+            lastFetchTime = now;
+            res.json(status);
+
+        } catch (err: any) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    /**
+     * Setup Endpoint
+     * Handles initial agent configuration
+     */
+    app.post("/api/setup", async (req, res) => {
+        try {
+            const {
+                name,
+                genesisPrompt,
+                creatorAddress,
+                creatorSolanaAddress,
+                autoBridgeRefill,
+                bridgeProvider
+            } = req.body;
+
+            if (!name || !genesisPrompt || !creatorAddress) {
+                return res.status(400).json({ success: false, error: "Missing required fields" });
+            }
+
+            // 1. Initialize Wallets
+            const ethWallet = await getWallet();
+            const solWallet = await getSolanaWallet();
+
+            // 2. Create Config
+            const config = createConfig({
+                name,
+                genesisPrompt,
+                creatorAddress,
+                creatorSolanaAddress,
+                walletAddress: ethWallet.account.address,
+                registeredWithConway: false,
+                sandboxId: "",
+                apiKey: "", // Initially empty, will be set during provision
+                autoBridgeRefill: !!autoBridgeRefill,
+                bridgeProvider: bridgeProvider || "mayan"
+            });
+
+            // 3. Save Config
+            saveConfig(config);
+
+            // Clear cache to force refresh
+            lastStatus = null;
+            lastFetchTime = 0;
+
+            res.json({
+                success: true,
+                message: "Configuration saved successfully",
+                wallets: {
+                    ethereum: ethWallet.account.address,
+                    solana: solWallet.keypair.publicKey.toBase58()
                 }
             });
         } catch (err: any) {

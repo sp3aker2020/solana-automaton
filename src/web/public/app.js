@@ -1,6 +1,7 @@
 
 // State Management
 let currentData = null;
+let currentStep = 1;
 
 async function updateDashboard() {
     try {
@@ -9,13 +10,102 @@ async function updateDashboard() {
 
         if (result.success) {
             const data = result.data;
-            renderStatus(data);
+            if (data.state === 'setup_required') {
+                showSetupWizard();
+            } else {
+                hideSetupWizard();
+                renderStatus(data);
+            }
             currentData = data;
         } else {
             setOffline();
         }
     } catch (err) {
         setOffline();
+    }
+}
+
+function showSetupWizard() {
+    document.getElementById('setup-wizard').classList.remove('hidden');
+}
+
+function hideSetupWizard() {
+    document.getElementById('setup-wizard').classList.add('hidden');
+}
+
+// Wizard Navigation
+function wizardNext() {
+    if (!validateStep(currentStep)) return;
+
+    document.getElementById(`wizard-step-${currentStep}`).classList.add('hidden');
+    currentStep++;
+    document.getElementById(`wizard-step-${currentStep}`).classList.remove('hidden');
+    updateWizardDots();
+}
+
+function wizardPrev() {
+    document.getElementById(`wizard-step-${currentStep}`).classList.add('hidden');
+    currentStep--;
+    document.getElementById(`wizard-step-${currentStep}`).classList.remove('hidden');
+    updateWizardDots();
+}
+
+function updateWizardDots() {
+    const dots = document.querySelectorAll('.dot');
+    dots.forEach((dot, idx) => {
+        if (idx + 1 === currentStep) dot.classList.add('active');
+        else dot.classList.remove('active');
+    });
+}
+
+function validateStep(step) {
+    if (step === 1) {
+        const name = document.getElementById('setup-name').value;
+        const genesis = document.getElementById('setup-genesis').value;
+        if (!name || !genesis) {
+            alert("Please provide both a name and a genesis prompt.");
+            return false;
+        }
+    }
+    return true;
+}
+
+async function submitSetup() {
+    const launchBtn = document.getElementById('launch-btn');
+    launchBtn.disabled = true;
+    launchBtn.innerText = "INITIALIZING...";
+
+    const setupData = {
+        name: document.getElementById('setup-name').value,
+        genesisPrompt: document.getElementById('setup-genesis').value,
+        bridgeProvider: document.getElementById('setup-provider').value,
+        autoBridgeRefill: document.getElementById('setup-auto-refill').checked,
+        creatorSolanaAddress: document.getElementById('setup-creator-sol').value,
+        creatorAddress: document.getElementById('setup-creator-eth').value
+    };
+
+    try {
+        const response = await fetch('/api/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(setupData)
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            // Success! Reload after a short delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            alert("Setup failed: " + result.error);
+            launchBtn.disabled = false;
+            launchBtn.innerText = "LAUNCH AGENT";
+        }
+    } catch (err) {
+        alert("Network error during setup.");
+        launchBtn.disabled = false;
+        launchBtn.innerText = "LAUNCH AGENT";
     }
 }
 
@@ -119,6 +209,6 @@ function animateValue(id, endValue) {
 }
 
 // Initial Boot
-console.log("Sovereign Dashboard: Port 18789 Link Established");
+console.log("Sovereign Dashboard: Port 18888 Link Established");
 updateDashboard();
 setInterval(updateDashboard, 15000);

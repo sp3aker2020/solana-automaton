@@ -360,3 +360,175 @@ footer {
         padding: 20px;
     }
 }
+
+/* Modal / Setup Wizard */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.3s ease;
+}
+
+.modal-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.setup-wizard-card {
+    max-width: 500px !important;
+    padding: 30px !important;
+    border: 1px solid rgba(0, 242, 255, 0.3);
+    box-shadow: 0 0 50px rgba(0, 242, 255, 0.1);
+}
+
+.wizard-header {
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.wizard-header h2 {
+    font-size: 14px;
+    letter-spacing: 4px;
+    color: var(--acc-cyan);
+    margin-bottom: 15px;
+}
+
+.wizard-steps-indicator {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--glass-border);
+}
+
+.dot.active {
+    background: var(--acc-cyan);
+    box-shadow: 0 0 10px var(--acc-cyan);
+}
+
+.wizard-step h3 {
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
+.step-desc {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 25px;
+}
+
+.input-group {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.input-group label {
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--text-dim);
+}
+
+.input-group input,
+.input-group textarea,
+.input-group select {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 12px;
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.input-group input:focus,
+.input-group textarea:focus,
+.input-group select:focus {
+    outline: none;
+    border-color: var(--acc-cyan);
+}
+
+.input-group textarea {
+    height: 100px;
+    resize: none;
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 25px;
+}
+
+.checkbox-group label {
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.btn {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: var(--acc-cyan);
+    color: var(--bg-dark);
+    width: 100%;
+}
+
+.btn-primary:hover {
+    box-shadow: 0 0 20px var(--acc-cyan);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--glass-border);
+}
+
+.btn-secondary:hover {
+    color: #fff;
+    border-color: #fff;
+}
+
+.btn-glow {
+    background: linear-gradient(90deg, var(--acc-cyan), var(--acc-purple));
+    color: #fff;
+    flex-grow: 1;
+}
+
+.btn-glow:hover {
+    box-shadow: 0 0 30px rgba(0, 242, 255, 0.4);
+}
+
+.wizard-actions {
+    display: flex;
+    gap: 15px;
+}
+
+.hidden {
+    display: none !important;
+}

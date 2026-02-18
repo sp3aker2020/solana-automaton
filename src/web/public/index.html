@@ -1,29 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sovereign Dashboard | Conway Automaton</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Roboto+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="glass-container">
+        <!-- Banner -->
+        <div class="dashboard-banner">
+            <img src="assets/banner.png" alt="Conway Banner">
+        </div>
+
         <!-- Header -->
         <header>
             <div class="status-indicator">
+                <img src="assets/logo.png" alt="S" class="dashboard-logo">
                 <div id="status-pulse" class="pulse offline"></div>
                 <span id="status-text">AGENT OFFLINE</span>
             </div>
             <div class="agent-identity">
-                <h1 id="agent-name">BOOTING...</h1>
+                <h1 id="agent-label">AGENT: <span id="agent-name">BOOTING...</span></h1>
                 <p id="agent-version">v0.1.0</p>
             </div>
         </header>
 
         <!-- Main Content Grid -->
         <main class="dashboard-grid">
-            
+
             <!-- Left Panel: Progress & Config -->
             <section class="panel creation-panel">
                 <div class="step-progress">
@@ -38,7 +48,7 @@
                     <div class="step" data-step="5">5</div>
                 </div>
                 <div class="step-label" id="current-step-label">Initializing Genesis</div>
-                
+
                 <div class="info-block glass-card">
                     <h3>Genesis Prompt</h3>
                     <p id="genesis-prompt" class="dim">Awaiting system prompt...</p>
@@ -97,4 +107,5 @@
 
     <script src="app.js"></script>
 </body>
+
 </html>

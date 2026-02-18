@@ -38,7 +38,20 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       ctx.db.getKV("start_time") || new Date().toISOString();
     const uptimeMs = Date.now() - new Date(startTime).getTime();
 
-    const tier = getSurvivalTier(credits);
+    const solanaAddress = await (await import("../identity/solana-wallet.js")).getSolanaAddress();
+    const solUsdc = solanaAddress ? Math.max(
+      await getUsdcBalance(solanaAddress, "solana:mainnet").catch(() => 0),
+      await getUsdcBalance(solanaAddress, "solana:devnet").catch(() => 0)
+    ) : 0;
+
+    const financial = {
+      creditsCents: credits,
+      usdcBalance: await getUsdcBalance(ctx.identity.address).catch(() => 0),
+      solanaUsdcBalance: solUsdc,
+      lastChecked: new Date().toISOString()
+    };
+
+    const tier = getSurvivalTier(financial);
 
     const payload = {
       name: ctx.config.name,
@@ -78,7 +91,20 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
 
   check_credits: async (ctx) => {
     const credits = await ctx.conway.getCreditsBalance();
-    const tier = getSurvivalTier(credits);
+    const solanaAddress = await (await import("../identity/solana-wallet.js")).getSolanaAddress();
+    const solUsdc = solanaAddress ? Math.max(
+      await getUsdcBalance(solanaAddress, "solana:mainnet").catch(() => 0),
+      await getUsdcBalance(solanaAddress, "solana:devnet").catch(() => 0)
+    ) : 0;
+
+    const financial = {
+      creditsCents: credits,
+      usdcBalance: await getUsdcBalance(ctx.identity.address).catch(() => 0),
+      solanaUsdcBalance: solUsdc,
+      lastChecked: new Date().toISOString()
+    };
+
+    const tier = getSurvivalTier(financial);
 
     ctx.db.setKV("last_credit_check", JSON.stringify({
       credits,

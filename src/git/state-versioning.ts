@@ -26,6 +26,17 @@ function resolveHome(p: string): string {
 export async function initStateRepo(
   conway: ConwayClient,
 ): Promise<void> {
+  // If the client doesn't have a sandboxId, we can't initialize the repo
+  // (In local mode, the user handles their own files)
+  const client = conway as any;
+  if (!client.targetSandboxId && !client.sandboxId) {
+    // Check if it's a proxy or the base client
+    const sandboxId = client.sandboxId || (client as any)._sandboxId;
+    if (!sandboxId && !(conway as any).__sandboxId) {
+      return;
+    }
+  }
+
   const dir = resolveHome(AUTOMATON_DIR);
 
   // Check if already initialized

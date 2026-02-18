@@ -36,13 +36,25 @@ export async function checkResources(
   let creditsCents = 0;
   try {
     creditsCents = await conway.getCreditsBalance();
-  } catch {}
+  } catch { }
 
   // Check USDC
   let usdcBalance = 0;
   try {
     usdcBalance = await getUsdcBalance(identity.address);
-  } catch {}
+  } catch { }
+
+  let solanaUsdcBalance = 0;
+  try {
+    const solanaAddress = await (await import("../identity/solana-wallet.js")).getSolanaAddress();
+    if (solanaAddress) {
+      const [mainnet, devnet] = await Promise.all([
+        getUsdcBalance(solanaAddress, "solana:mainnet").catch(() => 0),
+        getUsdcBalance(solanaAddress, "solana:devnet").catch(() => 0),
+      ]);
+      solanaUsdcBalance = Math.max(mainnet, devnet);
+    }
+  } catch { }
 
   // Check sandbox health
   let sandboxHealthy = true;
@@ -56,10 +68,11 @@ export async function checkResources(
   const financial: FinancialState = {
     creditsCents,
     usdcBalance,
+    solanaUsdcBalance,
     lastChecked: new Date().toISOString(),
   };
 
-  const tier = getSurvivalTier(creditsCents);
+  const tier = getSurvivalTier(financial);
   const prevTierStr = db.getKV("current_tier");
   const previousTier = (prevTierStr as SurvivalTier) || null;
   const tierChanged = previousTier !== null && previousTier !== tier;

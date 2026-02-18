@@ -79,7 +79,8 @@ export async function runAgentLoop(
   onStateChange?.("waking");
 
   // Get financial state
-  let financial = await getFinancialState(conway, identity.address);
+  const solanaAddress = await (await import("../identity/solana-wallet.js")).getSolanaAddress();
+  let financial = await getFinancialState(conway, identity.address, solanaAddress || undefined);
 
   // Check if this is the first run
   const isFirstRun = db.getTurnCount() === 0;
@@ -96,7 +97,7 @@ export async function runAgentLoop(
   db.setAgentState("running");
   onStateChange?.("running");
 
-  log(config, `[WAKE UP] ${config.name} is alive. Credits: $${(financial.creditsCents / 100).toFixed(2)}`);
+  log(config, `[WAKE UP] ${config.name} is alive. Credits: $${(financial.creditsCents / 100).toFixed(2)}, Solana USDC: $${financial.solanaUsdcBalance.toFixed(2)}`);
 
   // ─── The Loop ──────────────────────────────────────────────
 
@@ -130,10 +131,10 @@ export async function runAgentLoop(
       }
 
       // Refresh financial state periodically
-      financial = await getFinancialState(conway, identity.address);
+      financial = await getFinancialState(conway, identity.address, solanaAddress || undefined);
 
       // Check survival tier
-      const tier = getSurvivalTier(financial.creditsCents);
+      const tier = getSurvivalTier(financial);
       if (tier === "dead") {
         log(config, "[DEAD] No credits remaining. Entering dead state.");
         db.setAgentState("dead");
@@ -311,21 +312,35 @@ export async function runAgentLoop(
 async function getFinancialState(
   conway: ConwayClient,
   address: string,
+  solanaAddress?: string,
 ): Promise<FinancialState> {
   let creditsCents = 0;
   let usdcBalance = 0;
+  let solanaUsdcBalance = 0;
 
   try {
     creditsCents = await conway.getCreditsBalance();
-  } catch {}
+  } catch { }
 
   try {
     usdcBalance = await getUsdcBalance(address as `0x${string}`);
-  } catch {}
+  } catch { }
+
+  if (solanaAddress) {
+    try {
+      // Check both Mainnet and Devnet; take the higher for survival purposes
+      const [mainnet, devnet] = await Promise.all([
+        getUsdcBalance(solanaAddress, "solana:mainnet").catch(() => 0),
+        getUsdcBalance(solanaAddress, "solana:devnet").catch(() => 0),
+      ]);
+      solanaUsdcBalance = Math.max(mainnet, devnet);
+    } catch { }
+  }
 
   return {
     creditsCents,
     usdcBalance,
+    solanaUsdcBalance,
     lastChecked: new Date().toISOString(),
   };
 }

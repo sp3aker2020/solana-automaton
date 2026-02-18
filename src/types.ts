@@ -198,7 +198,8 @@ export interface HeartbeatPingPayload {
 
 export interface FinancialState {
   creditsCents: number;
-  usdcBalance: number;
+  usdcBalance: number; // Base USDC
+  solanaUsdcBalance: number; // Solana USDC
   lastChecked: string;
 }
 

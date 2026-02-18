@@ -19,24 +19,32 @@ import { SURVIVAL_THRESHOLDS } from "../types.js";
 export async function checkFinancialState(
   conway: ConwayClient,
   usdcBalance: number,
+  solanaUsdcBalance: number = 0,
 ): Promise<FinancialState> {
   const creditsCents = await conway.getCreditsBalance();
 
   return {
     creditsCents,
     usdcBalance,
+    solanaUsdcBalance,
     lastChecked: new Date().toISOString(),
   };
 }
 
 /**
- * Determine the survival tier based on current credits.
+ * Determine the survival tier based on all available assets.
  */
-export function getSurvivalTier(creditsCents: number): SurvivalTier {
-  if (creditsCents > SURVIVAL_THRESHOLDS.normal) return "normal";
-  if (creditsCents > SURVIVAL_THRESHOLDS.low_compute)
+export function getSurvivalTier(state: FinancialState): SurvivalTier {
+  // If we have credits, use thresholds
+  if (state.creditsCents > SURVIVAL_THRESHOLDS.normal) return "normal";
+  if (state.creditsCents > SURVIVAL_THRESHOLDS.low_compute)
     return "low_compute";
-  if (creditsCents > SURVIVAL_THRESHOLDS.dead) return "critical";
+  if (state.creditsCents > 0) return "critical";
+
+  // If credits are 0, check USDC (Base or Solana)
+  // Even 0.01 USDC is enough to keep the light on and seek funding
+  if (state.usdcBalance > 0 || state.solanaUsdcBalance > 0) return "critical";
+
   return "dead";
 }
 

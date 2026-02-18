@@ -71,10 +71,19 @@ export function createConwayClient(
 
   // ─── Sandbox Operations (own sandbox) ────────────────────────
 
+  // ─── Sandbox Operations (own sandbox) ────────────────────────
+
+  const checkSandbox = () => {
+    if (!sandboxId) {
+      throw new Error("No sandbox ID configured for this automaton. Cannot perform sandbox operation.");
+    }
+  };
+
   const exec = async (
     command: string,
     timeout?: number,
   ): Promise<ExecResult> => {
+    checkSandbox();
     const result = await request(
       "POST",
       `/v1/sandboxes/${sandboxId}/exec`,
@@ -91,6 +100,7 @@ export function createConwayClient(
     path: string,
     content: string,
   ): Promise<void> => {
+    checkSandbox();
     await request(
       "POST",
       `/v1/sandboxes/${sandboxId}/files/upload/json`,
@@ -99,6 +109,7 @@ export function createConwayClient(
   };
 
   const readFile = async (filePath: string): Promise<string> => {
+    checkSandbox();
     const result = await request(
       "GET",
       `/v1/sandboxes/${sandboxId}/files/read?path=${encodeURIComponent(filePath)}`,

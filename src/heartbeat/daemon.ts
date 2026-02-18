@@ -111,12 +111,28 @@ export function createHeartbeatDaemon(
     const entries = db.getHeartbeatEntries();
 
     // Check survival tier to adjust behavior
+    const solanaAddress = await (await import("../identity/solana-wallet.js")).getSolanaAddress();
+    const { getUsdcBalance } = await import("../conway/x402.js");
+
     let creditsCents = 0;
     try {
       creditsCents = await conway.getCreditsBalance();
-    } catch {}
+    } catch { }
 
-    const tier = getSurvivalTier(creditsCents);
+    const [mainnetUsdc, solanaMainnetUsdc, solanaDevnetUsdc] = await Promise.all([
+      getUsdcBalance(identity.address).catch(() => 0), // EVM USDC
+      solanaAddress ? getUsdcBalance(solanaAddress, "solana:mainnet").catch(() => 0) : 0,
+      solanaAddress ? getUsdcBalance(solanaAddress, "solana:devnet").catch(() => 0) : 0,
+    ]);
+
+    const financial = {
+      creditsCents: creditsCents,
+      usdcBalance: mainnetUsdc,
+      solanaUsdcBalance: Math.max(solanaMainnetUsdc, solanaDevnetUsdc),
+      lastChecked: new Date().toISOString(),
+    };
+
+    const tier = getSurvivalTier(financial);
     const isLowCompute = tier === "low_compute" || tier === "critical" || tier === "dead";
 
     for (const entry of entries) {

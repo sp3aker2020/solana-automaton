@@ -143,6 +143,10 @@ export async function runAgentLoop(
         if (funded) {
           // Re-fetch financial state after funding
           financial = await getFinancialState(conway, identity.address, solanaAddress || undefined);
+        } else if (db.getAgentState() === "sleeping") {
+          // Phase 2 Bridge was initiated, stop the loop to wait for funds
+          running = false;
+          break;
         }
       }
 

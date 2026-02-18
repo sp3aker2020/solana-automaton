@@ -291,16 +291,22 @@ async function parsePaymentRequired(
 
   if (header) {
     try {
-      // Some servers might send binary or double-encoded headers
-      const rawBody = Buffer.from(header, "base64");
-      const text = rawBody.toString("utf-8");
-      if (text.startsWith("{")) {
-        requirements = JSON.parse(text);
+      // 1. Try direct JSON parse (standard)
+      if (header.trim().startsWith("{")) {
+        requirements = JSON.parse(header);
       } else {
-        console.warn(`[X402] Header decode not JSON text: ${text.slice(0, 50)}`);
+        // 2. Fallback: Try Base64 decoding (for some legacy or special proxies)
+        const rawBody = Buffer.from(header, "base64");
+        const text = rawBody.toString("utf-8");
+        if (text.trim().startsWith("{")) {
+          requirements = JSON.parse(text);
+        } else {
+          // It might be a custom string or just garbage
+          // log(config, `[X402] Header found but not recognized as JSON.`);
+        }
       }
     } catch (err: any) {
-      console.warn(`[X402] Failed to parse X-Payment-Required header: ${err.message}`);
+      // silent fail for header parse, will try body next
     }
   }
 

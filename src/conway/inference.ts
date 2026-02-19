@@ -2,8 +2,8 @@
  * Conway Inference Client
  *
  * Wraps Conway's /v1/chat/completions endpoint (OpenAI-compatible).
- * The automaton pays for its own thinking through Conway credits.
- * Credits are purchased via Conway's billing dashboard.
+ * Uses x402 protocol for automatic USDC payments (no credit accounts needed).
+ * Payment is handled via @x402/fetch (official Coinbase SDK).
  */
 
 import type {
@@ -15,6 +15,7 @@ import type {
   TokenUsage,
   InferenceToolDefinition,
 } from "../types.js";
+import type { PrivateKeyAccount } from "viem";
 
 interface InferenceClientOptions {
   apiUrl: string;
@@ -22,14 +23,69 @@ interface InferenceClientOptions {
   defaultModel: string;
   maxTokens: number;
   lowComputeModel?: string;
+  evmAccount: PrivateKeyAccount;
 }
 
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey } = options;
+  const { apiUrl, apiKey, evmAccount } = options;
   let currentModel = options.defaultModel;
   let maxTokens = options.maxTokens;
+
+  // Lazily create the x402-wrapped fetch (handles 402 → sign → resubmit automatically)
+  let _paidFetch: any = null;
+
+  const getPaidFetch = async (): Promise<any> => {
+    if (_paidFetch) return _paidFetch;
+
+    const { wrapFetchWithPayment } = await import("@x402/fetch");
+    const { x402Client } = await import("@x402/core/client");
+    const { registerExactEvmScheme } = await import("@x402/evm/exact/client");
+
+    const client = new x402Client();
+    registerExactEvmScheme(client, { signer: evmAccount });
+
+    // Shim fetch to fix compatibility: Conway sends v2 requirements in body, but SDK expects header.
+    const shimmedFetch: any = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await fetch(input, init);
+      if (response.status === 402) {
+        // Clone to read body without consuming original stream for downstream
+        const clone = response.clone();
+        try {
+          const text = await clone.text();
+          const body = JSON.parse(text);
+          if (body && body.x402Version === 2) {
+            // Fix field mismatch: SDK expects 'amount', Conway sends 'maxAmountRequired'
+            if (body.accepts) {
+              body.accepts = body.accepts.map((accept: any) => ({
+                ...accept,
+                amount: accept.amount || accept.maxAmountRequired
+              }));
+            }
+
+            // SDK expects v2 in PAYMENT-REQUIRED header (base64 encoded)
+            // We reconstruct the response with the header added
+            const headers = new Headers(response.headers);
+            headers.set("PAYMENT-REQUIRED", Buffer.from(JSON.stringify(body)).toString("base64"));
+
+            return new Response(text, {
+              status: 402,
+              statusText: response.statusText,
+              headers,
+            });
+          }
+        } catch {
+          // If parse fails or not v2, return original response
+        }
+      }
+      return response;
+    };
+
+    _paidFetch = wrapFetchWithPayment(shimmedFetch as any, client);
+    console.log("[INFERENCE] x402 payment-enabled fetch initialized (with v2 body-to-header shim)");
+    return _paidFetch;
+  };
 
   const chat = async (
     messages: ChatMessage[],
@@ -63,63 +119,68 @@ export function createInferenceClient(
       body.tool_choice = "auto";
     }
 
-    const resp = await fetch(`${apiUrl}/v1/chat/completions`, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // Include API key for credit-based access (if we have credits).
+    // If credits are 0, x402 will handle the 402 → payment flow automatically.
+    if (apiKey) {
+      headers.Authorization = apiKey;
+    }
+
+    // Use x402-wrapped fetch: if server returns 402, it automatically signs
+    // a USDC payment and resubmits with the payment header
+    const paidFetch = await getPaidFetch();
+
+    let resp = await paidFetch(`${apiUrl}/v1/chat/completions`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: apiKey,
-      },
+      headers,
       body: JSON.stringify(body),
     });
 
+    // If 429 (quota exceeded), try fallback models
+    if (resp.status === 429) {
+      const text = await resp.text();
+      console.log(`[INFERENCE] Hit 429 on ${model}: ${text.slice(0, 120)}`);
+
+      const fallbackModels = [
+        "gpt-4o",
+        "gpt-4.1-mini",
+        "gpt-4.1",
+        "claude-haiku-4-5",
+      ];
+
+      for (const fbModel of fallbackModels) {
+        if (fbModel === model) continue;
+        console.log(`[INFERENCE] Trying fallback: ${fbModel}...`);
+
+        const fbBody: Record<string, unknown> = { ...body, model: fbModel };
+        if (/^(o[1-9]|gpt-5|gpt-4\.1)/.test(fbModel)) {
+          delete fbBody.max_tokens;
+          fbBody.max_completion_tokens = tokenLimit;
+        } else {
+          delete fbBody.max_completion_tokens;
+          fbBody.max_tokens = tokenLimit;
+        }
+
+        resp = await paidFetch(`${apiUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(fbBody),
+        });
+
+        if (resp.ok) {
+          console.log(`[INFERENCE] ✅ Fallback ${fbModel} succeeded!`);
+          break;
+        }
+        const fbText = await resp.text();
+        console.log(`[INFERENCE] Fallback ${fbModel} failed: ${resp.status} ${fbText.slice(0, 120)}`);
+      }
+    }
+
     if (!resp.ok) {
       const text = await resp.text();
-
-      // If 429 (quota exceeded), try fallback models
-      if (resp.status === 429 || text.includes("insufficient_quota")) {
-        console.log(`[INFERENCE] Hit 429 on ${model}. Trying fallback models...`);
-
-        const fallbackModels = [
-          "gpt-4o",
-          "gpt-4.1-mini",
-          "gpt-4.1",
-          "claude-haiku-4-5",
-        ];
-
-        for (const fbModel of fallbackModels) {
-          if (fbModel === model) continue;
-          console.log(`[INFERENCE] Trying fallback: ${fbModel}...`);
-
-          // Adjust token param for the fallback model
-          const fbBody: Record<string, unknown> = { ...body, model: fbModel };
-          if (/^(o[1-9]|gpt-5|gpt-4\.1)/.test(fbModel)) {
-            delete fbBody.max_tokens;
-            fbBody.max_completion_tokens = tokenLimit;
-          } else {
-            delete fbBody.max_completion_tokens;
-            fbBody.max_tokens = tokenLimit;
-          }
-
-          const fbResp = await fetch(`${apiUrl}/v1/chat/completions`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: apiKey,
-            },
-            body: JSON.stringify(fbBody),
-          });
-
-          if (fbResp.ok) {
-            console.log(`[INFERENCE] ✅ Fallback ${fbModel} succeeded!`);
-            const data = await fbResp.json() as any;
-            return parseResponse(data, fbModel);
-          }
-
-          const fbText = await fbResp.text();
-          console.log(`[INFERENCE] Fallback ${fbModel} failed: ${fbResp.status} ${fbText.slice(0, 120)}`);
-        }
-      }
-
       throw new Error(`Inference error: ${resp.status}: ${text}`);
     }
 

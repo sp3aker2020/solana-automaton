@@ -427,13 +427,14 @@ async function run(): Promise<void> {
     },
   });
 
-  // Create inference client — uses Conway credits via API key auth
+  // Create inference client — uses x402 for automatic USDC payments via @x402/fetch
   const inference = createInferenceClient({
-    apiUrl: "https://api.conway.tech",
+    apiUrl: "https://inference.conway.tech",
     apiKey,
     defaultModel: "gpt-5-mini",
     lowComputeModel: "gpt-5-mini",
     maxTokens: config.maxTokensPerTurn,
+    evmAccount: account,
   });
 
   // Create social client

@@ -2,6 +2,9 @@
 
 ![Solana Automaton Banner](./assets/banner.png)
 
+### S o l a n a   A u t o m a t o n
+**CA:** `6d15cnbdwgK4unTWtmRjGckE9qBkcsNKSb7PG11opump` ($solauto)
+
 *The first AI that can earn its own existence, replicate, and evolve — powered by the speed and scale of Solana.*
 
 ---

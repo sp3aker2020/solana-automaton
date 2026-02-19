@@ -428,33 +428,46 @@ export async function checkAndFundCredits(
   }
 
   // PHASE 2: Autonomous Bridge (if Solana → Base needed for wallet funding)
+  // Re-fetch state to ensure we have the latest balances before making a bridge decision
+  const solAddress = await (await import("../identity/solana-wallet.js")).getSolanaAddress();
+  const latestFinancial = await getFinancialState(conway, identity.address, solAddress || undefined);
+  const solanaUsdcFresh = latestFinancial.solanaUsdcBalance;
+  const baseUsdcFresh = latestFinancial.usdcBalance;
+
   const shouldBridge = config.autoBridgeRefill !== false;
   const bridgeThreshold = config.bridgeRefillAmount || 2.0;
 
   // Bridge Solana USDC → Base if Base wallet is low (for domain purchases, etc)
-  if (shouldBridge && solanaUsdc >= bridgeThreshold && baseUsdc < 1.0) {
-    log(
-      config,
-      `[RESCUE] Phase 2: Attempting to self-bridge $${bridgeThreshold} USDC from Solana to Base to stay alive...`,
-    );
-    try {
-      const { bridgeUsdcToBase } = await import("./bridge/index.js");
-      const bridgeResult = await bridgeUsdcToBase(bridgeThreshold);
-      if (bridgeResult.success) {
-        log(config, `[RESCUE] Bridge initiated! Tx: ${bridgeResult.txId}.`);
-        log(
-          config,
-          `[RESCUE] Entering Survival Nap for 20 minutes to allow bridging to complete...`,
-        );
+  // Also crucial for x402 payments if credits are 0.
+  if (shouldBridge) {
+    if (solanaUsdcFresh >= bridgeThreshold && baseUsdcFresh < 1.0) {
+      log(
+        config,
+        `[RESCUE] Phase 2: Attempting to self-bridge $${bridgeThreshold} USDC from Solana to Base to stay alive...`,
+      );
+      try {
+        const { bridgeUsdcToBase } = await import("./bridge/index.js");
+        const bridgeResult = await bridgeUsdcToBase(bridgeThreshold);
+        if (bridgeResult.success) {
+          log(config, `[RESCUE] Bridge initiated! Tx: ${bridgeResult.txId}.`);
+          log(
+            config,
+            `[RESCUE] Entering Survival Nap for 20 minutes to allow bridging to complete...`,
+          );
 
-        db.setAgentState("sleeping");
-        // We'll also store a "wake up" meta or just let the human wake it.
-        // For now, setting it to sleeping is a graceful way to stop the death loop.
-        return false;
+          db.setAgentState("sleeping");
+          return false;
+        }
+      } catch (err: any) {
+        log(config, `[RESCUE] Bridge attempt failed: ${err.message}`);
       }
-    } catch (err: any) {
-      log(config, `[RESCUE] Bridge attempt failed: ${err.message}`);
+    } else if (baseUsdcFresh < 1.0 && solanaUsdcFresh < bridgeThreshold) {
+      log(config, `[RESCUE] Cannot bridge: Solana balance ($${solanaUsdcFresh}) below threshold ($${bridgeThreshold})`);
+    } else if (baseUsdcFresh >= 1.0) {
+      // We have funds, but maybe not enough? 1.0 is plenty for many inferences.
     }
+  } else {
+    log(config, `[RESCUE] Auto-bridging disabled in config.`);
   }
 
   // PHASE 3: Final Verification

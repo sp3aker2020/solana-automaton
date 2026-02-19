@@ -13,7 +13,11 @@ const __dirname = path.dirname(__filename);
 
 let lastStatus: any = null;
 let lastFetchTime = 0;
-const CACHE_DURATION = 5000; // 5 seconds (Reduced for snappier UI)
+const STATUS_CACHE_DURATION = 30000; // 30 seconds
+
+let lastPrices: any = null;
+let lastPricesFetchTime = 0;
+const PRICES_CACHE_DURATION = 3600000; // 1 hour
 
 export function startDashboardServer(port: number = 18888) {
     const app = express();
@@ -54,7 +58,7 @@ export function startDashboardServer(port: number = 18888) {
             }
 
             const now = Date.now();
-            if (lastStatus && (now - lastFetchTime < CACHE_DURATION)) {
+            if (lastStatus && (now - lastFetchTime < STATUS_CACHE_DURATION)) {
                 return res.json(lastStatus);
             }
 
@@ -303,12 +307,17 @@ export function startDashboardServer(port: number = 18888) {
                 identity: { evm: account }
             });
 
+            const now = Date.now();
+            if (lastPrices && (now - lastPricesFetchTime < PRICES_CACHE_DURATION)) {
+                return res.json(lastPrices);
+            }
+
             const [models, computePricing] = await Promise.all([
                 conway.listModels().catch(() => []),
                 conway.getCreditsPricing().catch(() => [])
             ]);
 
-            res.json({
+            const prices = {
                 success: true,
                 data: {
                     models,
@@ -320,7 +329,11 @@ export function startDashboardServer(port: number = 18888) {
                         { tld: ".xyz", registrationPrice: 1500, renewalPrice: 1500 }
                     ]
                 }
-            });
+            };
+
+            lastPrices = prices;
+            lastPricesFetchTime = now;
+            res.json(prices);
         } catch (err: any) {
             res.status(500).json({ success: false, error: err.message });
         }

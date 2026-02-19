@@ -16,7 +16,6 @@ async function updateDashboard() {
                 hideSetupWizard();
                 trackBalanceChanges(data.balances);
                 renderStatus(data);
-                fetchPrices(); // Fetch prices after status update
             }
             currentData = data;
         } else {
@@ -38,6 +37,13 @@ function addLog(message, type = 'sys') {
         message.includes("Waiting for approval")) {
         p.classList.add('log-attn');
         type = 'attn';
+    }
+
+    // Detect open-ended questions
+    if (message.includes("[QUESTION ASKED]") ||
+        message.includes("paused to ask you a question")) {
+        p.classList.add('log-question');
+        type = 'quest';
     }
 
     const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -473,4 +479,8 @@ function renderPrices(data) {
 // Initial Boot
 console.log("Conway SOLAUTO Dashboard: Port 18888 Link Established");
 updateDashboard();
-setInterval(updateDashboard, 15000);
+fetchPrices(); // Initial price fetch
+
+// Regular Intervals
+setInterval(updateDashboard, 15000); // Status sync every 15s
+setInterval(fetchPrices, 1800000);   // Price sync every 30 mins

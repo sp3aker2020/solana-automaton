@@ -28,6 +28,7 @@ interface ConwayClientOptions {
   apiUrl: string;
   apiKey: string;
   sandboxId: string;
+  domainsApiUrl?: string;
   identity: {
     evm: PrivateKeyAccount;
     solana?: Keypair;
@@ -38,6 +39,7 @@ export function createConwayClient(
   options: ConwayClientOptions,
 ): ConwayClient {
   const { apiUrl, apiKey, sandboxId } = options;
+  const domainsApiUrl = options.domainsApiUrl || "https://api.conway.domains";
 
   async function request(
     method: string,
@@ -247,27 +249,42 @@ export function createConwayClient(
     query: string,
     tlds?: string,
   ): Promise<DomainSearchResult[]> => {
+    // Primary: Conway Domains API at api.conway.domains
     const paths = [
-      { path: "/v1/domains/search", param: "query" },
-      { path: "/v1/registry/search", param: "query" },
-      { path: "/v1/domains/check", param: "q" },
+      { base: domainsApiUrl, path: "/domains/search", param: "q" },
+      { base: apiUrl, path: "/v1/domains/search", param: "query" },
+      { base: apiUrl, path: "/v1/registry/search", param: "query" },
+      { base: apiUrl, path: "/v1/domains/check", param: "q" },
     ];
 
     let lastError = "Unknown search error";
 
-    for (const { path, param } of paths) {
+    for (const { base, path, param } of paths) {
       try {
         const params = new URLSearchParams({ [param]: query });
         if (tlds) params.set("tlds", tlds);
 
-        const result = await request("GET", `${path}?${params}`);
+        const url = `${base}${path}?${params}`;
+        const resp = await fetch(url, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: apiKey,
+          },
+        });
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(`${resp.status}: ${text}`);
+        }
+
+        const result = await resp.json() as any;
         const results = result.results || result.domains || result.registry || result.data || [];
 
         return (Array.isArray(results) ? results : [results]).map((d: any) => ({
           domain: d.domain || d.name || query,
           available: d.available ?? d.purchasable ?? (d.status === "available"),
-          registrationPrice: d.registration_price ?? d.purchase_price ?? d.price,
-          renewalPrice: d.renewal_price ?? d.renewal,
+          registrationPrice: d.pricing?.registration ?? d.price ?? d.registration_price ?? d.purchase_price,
+          renewalPrice: d.pricing?.renewal ?? d.renewal_price ?? d.renewal,
           currency: d.currency || "USD",
         }));
       } catch (err: any) {
@@ -278,7 +295,7 @@ export function createConwayClient(
     }
 
     throw new Error(
-      `Conway API error: GET /v1/domains/search -> ${lastError}`
+      `Conway API error: GET /domains/search -> ${lastError}`
     );
   };
 
@@ -286,29 +303,83 @@ export function createConwayClient(
     domain: string,
     years: number = 1,
   ): Promise<DomainRegistration> => {
-    const result = await request("POST", "/v1/domains/register", {
-      domain,
-      years,
-    });
-    return {
-      domain: result.domain || domain,
-      status: result.status || "registered",
-      expiresAt: result.expires_at || result.expiry,
-      transactionId: result.transaction_id || result.id,
-    };
+    // Try domains API first, then fall back to control plane
+    const urls = [
+      `${domainsApiUrl}/domains/register`,
+      `${apiUrl}/v1/domains/register`,
+    ];
+
+    let lastError = "Unknown register error";
+
+    for (const url of urls) {
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: apiKey,
+          },
+          body: JSON.stringify({ domain, years }),
+        });
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          // If 402, the x402 payment flow should handle it
+          if (resp.status === 402) {
+            throw new Error(`402: Payment required - ${text}`);
+          }
+          throw new Error(`${resp.status}: ${text}`);
+        }
+
+        const result = await resp.json() as any;
+        return {
+          domain: result.domain || domain,
+          status: result.status || "registered",
+          expiresAt: result.expires_at || result.expiry,
+          transactionId: result.transaction_id || result.id,
+        };
+      } catch (err: any) {
+        lastError = err.message || "Unknown error";
+        if (lastError.includes("404")) continue;
+        throw err;
+      }
+    }
+
+    throw new Error(`Conway API error: POST /domains/register -> ${lastError}`);
   };
 
   const listDnsRecords = async (domain: string): Promise<DnsRecord[]> => {
-    const result = await request("GET", `/v1/domains/${encodeURIComponent(domain)}/dns`);
-    const records = result.records || result || [];
-    return (Array.isArray(records) ? records : []).map((r: any) => ({
-      id: r.id || r.record_id || "",
-      type: r.type || "",
-      host: r.host || r.name || "",
-      value: r.value || r.answer || "",
-      ttl: r.ttl,
-      distance: r.distance ?? r.priority,
-    }));
+    // Try domains API first
+    const urls = [
+      `${domainsApiUrl}/domains/${encodeURIComponent(domain)}/dns`,
+      `${apiUrl}/v1/domains/${encodeURIComponent(domain)}/dns`,
+    ];
+
+    for (const url of urls) {
+      try {
+        const resp = await fetch(url, {
+          headers: { Authorization: apiKey },
+        });
+        if (!resp.ok) {
+          if (resp.status === 404) continue;
+          throw new Error(`${resp.status}: ${await resp.text()}`);
+        }
+        const result = await resp.json() as any;
+        const records = result.records || result || [];
+        return (Array.isArray(records) ? records : []).map((r: any) => ({
+          id: r.id || r.record_id || "",
+          type: r.type || "",
+          host: r.host || r.name || "",
+          value: r.value || r.answer || "",
+          ttl: r.ttl,
+          distance: r.distance ?? r.priority,
+        }));
+      } catch (err: any) {
+        if (err.message?.includes("404")) continue;
+        throw err;
+      }
+    }
+    return [];
   };
 
   const addDnsRecord = async (

@@ -325,8 +325,8 @@ async function checkDomain(domain: string): Promise<void> {
       console.log(`
 Domain: ${match.domain}
 Available: ${match.available}
-Price: $${((match.registrationPrice || 0) / 100).toFixed(2)} ${match.currency}
-Renewal: $${((match.renewalPrice || 0) / 100).toFixed(2)} ${match.currency}
+Price: $${(match.registrationPrice || 0).toFixed(2)} ${match.currency}
+Renewal: $${(match.renewalPrice || 0).toFixed(2)} ${match.currency}
 `);
     }
   } catch (err: any) {
@@ -499,8 +499,8 @@ async function run(): Promise<void> {
   const inference = createInferenceClient({
     apiUrl: "https://inference.conway.tech",
     apiKey,
-    defaultModel: "gpt-4o",
-    lowComputeModel: "gpt-4o",
+    defaultModel: "gpt-5-mini",
+    lowComputeModel: "gpt-5-mini",
     maxTokens: config.maxTokensPerTurn,
     evmAccount: account,
   });

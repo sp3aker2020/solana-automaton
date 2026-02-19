@@ -1783,6 +1783,28 @@ Model: ${ctx.inference.getDefaultModel()}
         return `I have paused to request your approval for: ${action}. \nDetails: ${details}\n\nPlease reply with "CONFIRM" to proceed or "CANCEL" to abort. I will wait for your message in the dashboard.`;
       },
     },
+    {
+      name: "ask_user",
+      description: "Ask the user an open-ended question and wait for their response. Use this when you need guidance, clarification, or creative input.",
+      category: "conway",
+      parameters: {
+        type: "object",
+        properties: {
+          question: { type: "string", description: "The question to ask the user" },
+        },
+        required: ["question"],
+      },
+      execute: async (args, ctx) => {
+        const question = args.question as string;
+        console.log(`[QUESTION ASKED] ${question}`);
+
+        // We use a different key or signal for questions vs approvals if needed,
+        // but generally just logging it and returning a prompt to wait is sufficient.
+        // The dashboard will pick up on "[QUESTION ASKED]" for styling.
+
+        return `I have paused to ask you a question: "${question}"\n\nPlease reply with your answer. I will wait for your message in the dashboard.`;
+      },
+    },
   ];
 }
 

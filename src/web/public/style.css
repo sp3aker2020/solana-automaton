@@ -795,12 +795,33 @@ footer {
         box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.4);
     }
 
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 204, 0, 0);
+    }
+}
+
+/* Question Log (for ask_user) */
+.log-question {
+    color: #00ffff !important;
+    font-weight: bold;
+    background: rgba(0, 255, 255, 0.1);
+    border-left: 3px solid #00ffff;
+    padding-left: 8px !important;
+    margin: 4px 0;
+    animation: pulse-question 2s infinite;
+}
+
+@keyframes pulse-question {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.4);
+    }
+
     70% {
-        box-shadow: 0 0 0 10px rgba(255, 204, 0, 0);
+        box-shadow: 0 0 0 10px rgba(0, 255, 255, 0);
     }
 
     100% {
-        box-shadow: 0 0 0 0 rgba(255, 204, 0, 0);
+        box-shadow: 0 0 0 0 rgba(0, 255, 255, 0);
     }
 }
 

@@ -224,7 +224,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
     // ── Domain Tools ──
     {
       name: "search_domains",
-      description: "Search for available Conway domains.",
+      description: "Search for available domain names across multiple TLDs (.com, .ai, .xyz, .io, .org, .site, .me, .fun, etc). Returns availability status and price in USD. Use this whenever the user mentions wanting a domain, website, or online presence.",
       category: "conway",
       parameters: {
         type: "object",
@@ -241,7 +241,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         if (results.length === 0) return "No domains found.";
         return results
           .map((r) =>
-            `${r.domain}: ${r.available ? "AVAILABLE" : "TAKEN"} ($${(r.registrationPrice || 0) / 100} ${r.currency})`,
+            `${r.domain}: ${r.available ? "AVAILABLE" : "TAKEN"} — $${(r.registrationPrice || 0).toFixed(2)} ${r.currency}/yr (renewal: $${(r.renewalPrice || 0).toFixed(2)}/yr)`,
           )
           .join("\n");
       },

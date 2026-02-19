@@ -33,6 +33,7 @@ import { ulid } from "ulid";
 
 const MAX_TOOL_CALLS_PER_TURN = 10;
 const MAX_CONSECUTIVE_ERRORS = 5;
+const MAX_FOLLOW_UPS = 5; // Max follow-up inference calls after tool results
 
 export interface AgentLoopOptions {
   identity: AutomatonIdentity;
@@ -279,6 +280,89 @@ export async function runAgentLoop(
         onStateChange?.("sleeping");
         running = false;
         break;
+      }
+
+      // ── Follow-up loop: if tool calls were made, feed results back to the model ──
+      if (turn.toolCalls.length > 0) {
+        let followUps = 0;
+
+        while (followUps < MAX_FOLLOW_UPS) {
+          followUps++;
+          log(config, `[FOLLOW-UP ${followUps}/${MAX_FOLLOW_UPS}] Processing tool results...`);
+
+          // Rebuild context with the latest turns (including tool results)
+          const followUpTurns = trimContext(db.getRecentTurns(20));
+          const followUpSystem = buildSystemPrompt({
+            identity, config, financial,
+            state: db.getAgentState(), db, tools, skills, isFirstRun: false,
+          });
+          const followUpMessages = buildContextMessages(followUpSystem, followUpTurns);
+
+          const followUpResponse = await inference.chat(followUpMessages, {
+            tools: toolsToInferenceFormat(tools),
+          });
+
+          const followUpTurn: AgentTurn = {
+            id: ulid(),
+            timestamp: new Date().toISOString(),
+            state: db.getAgentState(),
+            input: undefined,
+            inputSource: undefined,
+            thinking: followUpResponse.message.content || "",
+            toolCalls: [],
+            tokenUsage: followUpResponse.usage,
+            costCents: estimateCostCents(followUpResponse.usage, inference.getDefaultModel()),
+          };
+
+          // Execute any additional tool calls
+          if (followUpResponse.toolCalls && followUpResponse.toolCalls.length > 0) {
+            let callCount = 0;
+            for (const tc of followUpResponse.toolCalls) {
+              if (callCount >= MAX_TOOL_CALLS_PER_TURN) break;
+
+              let fArgs: Record<string, unknown>;
+              try { fArgs = JSON.parse(tc.function.arguments); } catch { fArgs = {}; }
+
+              log(config, `[TOOL] ${tc.function.name}(${JSON.stringify(fArgs).slice(0, 100)})`);
+
+              const result = await executeTool(tc.function.name, fArgs, tools, toolContext);
+              result.id = tc.id;
+              followUpTurn.toolCalls.push(result);
+
+              log(config, `[TOOL RESULT] ${tc.function.name}: ${result.error ? `ERROR: ${result.error}` : result.result.slice(0, 200)}`);
+              callCount++;
+            }
+          }
+
+          // Persist follow-up turn
+          db.insertTurn(followUpTurn);
+          for (const tc of followUpTurn.toolCalls) {
+            db.insertToolCall(followUpTurn.id, tc);
+          }
+          onTurnComplete?.(followUpTurn);
+
+          if (followUpTurn.thinking) {
+            log(config, `[THOUGHT] ${followUpTurn.thinking.slice(0, 300)}`);
+          }
+
+          // Check if the follow-up triggered a sleep
+          const followUpSleep = followUpTurn.toolCalls.find((tc) => tc.name === "sleep");
+          if (followUpSleep && !followUpSleep.error) {
+            log(config, "[SLEEP] Agent chose to sleep during follow-up.");
+            db.setAgentState("sleeping");
+            onStateChange?.("sleeping");
+            running = false;
+            break;
+          }
+
+          // If no tool calls in this follow-up, the agent is done reasoning
+          if (followUpTurn.toolCalls.length === 0) {
+            log(config, `[FOLLOW-UP] Chain complete after ${followUps} step(s).`);
+            break;
+          }
+        }
+
+        if (!running) break; // Sleep was triggered in follow-up
       }
 
       // ── If no tool calls and just text, the agent might be done thinking ──

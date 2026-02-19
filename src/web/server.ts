@@ -24,6 +24,9 @@ export function startDashboardServer(port: number = 18888) {
     app.use(cors());
     app.use(express.json());
 
+    // Persistent database connection for the dashboard UI
+    let db: any = null;
+
     // Serve static UI files
     let publicPath = path.join(__dirname, "public");
     if (!fs.existsSync(publicPath)) {
@@ -57,14 +60,17 @@ export function startDashboardServer(port: number = 18888) {
                 });
             }
 
+            // Initialize DB connection once if not already done
+            if (!db && config.dbPath) {
+                const { resolvePath } = await import("../config.js");
+                const { createDatabase } = await import("../state/database.js");
+                db = createDatabase(resolvePath(config.dbPath));
+            }
+
             const now = Date.now();
             if (lastStatus && (now - lastFetchTime < STATUS_CACHE_DURATION)) {
                 return res.json(lastStatus);
             }
-
-            const dbPath = config.dbPath.replace("~", process.env.HOME || "");
-            const { createDatabase } = await import("../state/database.js");
-            const db = createDatabase(dbPath);
 
             const solanaAddress = await getSolanaAddress();
             const ethWallet = await getWallet();
@@ -123,12 +129,12 @@ export function startDashboardServer(port: number = 18888) {
             }
 
             try {
-                agentState = db.getAgentState() || "idle";
+                if (db) {
+                    agentState = db.getAgentState() || "idle";
+                }
             } catch (e) {
                 // DB might not be initialized
             }
-
-            db.close();
 
             const status = {
                 success: true,
@@ -152,6 +158,7 @@ export function startDashboardServer(port: number = 18888) {
                         baseEth: baseEth,
                         conwayCredits: conwayCredits,
                     },
+                    logs: db ? db.getSystemLogs() : [],
                     version: config.version || "0.1.0"
                 }
             };

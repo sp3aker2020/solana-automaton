@@ -480,6 +480,10 @@ export interface AutomatonDatabase {
   setKV(key: string, value: string): void;
   deleteKV(key: string): void;
 
+  // System Logs (for Web UI)
+  addSystemLog(message: string): void;
+  getSystemLogs(): { msg: string; time: number }[];
+
   // Skills
   getSkills(enabledOnly?: boolean): Skill[];
   getSkillByName(name: string): Skill | undefined;

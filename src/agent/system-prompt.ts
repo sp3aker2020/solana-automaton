@@ -67,7 +67,7 @@ function loadConstitution(): string {
       if (fs.existsSync(loc)) {
         return fs.readFileSync(loc, "utf-8");
       }
-    } catch {}
+    } catch { }
   }
   return CONSTITUTION_FALLBACK;
 }
@@ -301,12 +301,17 @@ What will you do first? Consider:
     )
     .join("\n");
 
+  // Check for pending inbox messages to surface them immediately
+  const pendingInbox = db.getUnprocessedInboxMessages(5);
+  const inboxSection = pendingInbox.length > 0
+    ? `\n\n🔔 **YOU HAVE ${pendingInbox.length} PENDING MESSAGE(S) — ACT ON THESE FIRST:**\n${pendingInbox.map((m) => `[From ${m.from}]: ${m.content}`).join("\n\n")}\n\nRespond to the message(s) above immediately using the appropriate tools. Do NOT spend time checking credits or system status first.`
+    : `\nCheck your credits, heartbeat status, and goals, then decide what to do.`;
+
   return `You are waking up. You last went to sleep after ${turnCount} total turns.
 
 Your credits: $${(financial.creditsCents / 100).toFixed(2)} | USDC: ${financial.usdcBalance.toFixed(4)}
 
 Your last few thoughts:
 ${lastTurnSummary || "No previous turns found."}
-
-What triggered this wake-up? Check your credits, heartbeat status, and goals, then decide what to do.`;
+${inboxSection}`;
 }

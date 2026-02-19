@@ -237,6 +237,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["query"],
       },
       execute: async (args, ctx) => {
+        ctx.db.addSystemLog(`🔍 Searching domain availability for: "${args.query}"`);
         const results = await ctx.conway.searchDomains(args.query as string);
         if (results.length === 0) return "No domains found.";
         return results

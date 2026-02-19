@@ -279,6 +279,29 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
     db.prepare("DELETE FROM kv WHERE key = ?").run(key);
   };
 
+  // ─── System Logs (for Web UI) ────────────────────────────────
+
+  const addSystemLog = (message: string): void => {
+    try {
+      const logsStr = getKV("ui_system_logs") || "[]";
+      const logs = JSON.parse(logsStr) as { msg: string; time: number }[];
+      logs.push({ msg: message, time: Date.now() });
+      if (logs.length > 50) logs.shift();
+      setKV("ui_system_logs", JSON.stringify(logs));
+    } catch (e) {
+      setKV("ui_system_logs", JSON.stringify([{ msg: message, time: Date.now() }]));
+    }
+  };
+
+  const getSystemLogs = (): { msg: string; time: number }[] => {
+    try {
+      const logsStr = getKV("ui_system_logs") || "[]";
+      return JSON.parse(logsStr);
+    } catch (e) {
+      return [];
+    }
+  };
+
   // ─── Skills ─────────────────────────────────────────────────
 
   const getSkills = (enabledOnly?: boolean): Skill[] => {
@@ -472,6 +495,8 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
     getKV,
     setKV,
     deleteKV,
+    addSystemLog,
+    getSystemLogs,
     getSkills,
     getSkillByName,
     upsertSkill,

@@ -2,6 +2,7 @@
 let currentData = null;
 let currentStep = 1;
 let lastBalances = null;
+let lastSeenLogTime = 0;
 
 async function updateDashboard() {
     try {
@@ -15,6 +16,17 @@ async function updateDashboard() {
             } else {
                 hideSetupWizard();
                 trackBalanceChanges(data.balances);
+
+                // Print new system logs from agent
+                if (data.logs && Array.isArray(data.logs)) {
+                    data.logs.forEach(log => {
+                        if (log.time > lastSeenLogTime) {
+                            addLog(log.msg, 'sys');
+                            lastSeenLogTime = log.time;
+                        }
+                    });
+                }
+
                 renderStatus(data);
             }
             currentData = data;

@@ -265,19 +265,23 @@ export function createConwayClient(
         if (tlds) params.set("tlds", tlds);
 
         const url = `${base}${path}?${params}`;
-        const resp = await fetch(url, {
-          headers: {
+        const { x402Fetch } = await import("./x402.js");
+        const resp = await x402Fetch(
+          url,
+          options.identity,
+          "GET",
+          undefined,
+          {
             "Content-Type": "application/json",
             Authorization: apiKey,
-          },
-        });
+          }
+        );
 
-        if (!resp.ok) {
-          const text = await resp.text();
-          throw new Error(`${resp.status}: ${text}`);
+        if (!resp.success) {
+          throw new Error(resp.error || "Unknown x402 payment error");
         }
 
-        const result = await resp.json() as any;
+        const result = typeof resp.response === "string" ? JSON.parse(resp.response) : resp.response;
         const results = result.results || result.domains || result.registry || result.data || [];
 
         return (Array.isArray(results) ? results : [results]).map((d: any) => ({

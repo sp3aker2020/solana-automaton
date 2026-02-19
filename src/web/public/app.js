@@ -145,11 +145,25 @@ function renderStatus(data) {
     }
 
     // 2. Financials (Animate numbers)
+    const totalTreasury = data.balances.baseUsdc + data.balances.solanaUsdc;
+    const totalCapacity = data.balances.conwayCredits + totalTreasury;
+
+    animateValue('runtime-capacity', totalCapacity);
     animateValue('credit-balance', data.balances.conwayCredits);
+    animateValue('treasury-balance', totalTreasury);
+
     animateValue('solana-balance', data.balances.solanaUsdc);
     animateValue('solana-sol-balance', data.balances.solanaSol, 4);
     animateValue('base-usdc-balance', data.balances.baseUsdc);
     animateValue('base-eth-balance', data.balances.baseEth, 4); // 4 decimals for ETH
+
+    // Protocol Badge
+    const badge = document.getElementById('protocol-badge');
+    if (totalTreasury > 0.1) {
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
 
     // 3. Wallets
     document.getElementById('solana-address').innerText = data.wallets.solana || 'NOT INITIALIZED';

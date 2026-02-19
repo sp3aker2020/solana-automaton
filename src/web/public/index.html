@@ -159,12 +159,25 @@
             <!-- Right Panel: Financial Health -->
             <section class="panel financial-panel">
                 <div class="card credit-card glowing-cyan">
-                    <h2>Conway Credits</h2>
+                    <div class="card-header-row">
+                        <h2>RUNTIME CAPACITY</h2>
+                        <span id="protocol-badge" class="badge badge-x402 hidden">X402 ACTIVE</span>
+                    </div>
                     <div class="balance-row">
                         <span class="currency-symbol">$</span>
-                        <span id="credit-balance" class="balance-value">0.00</span>
+                        <span id="runtime-capacity" class="balance-value">0.00</span>
                     </div>
-                    <div class="flex gap-2" style="margin-top: 10px;">
+                    <div class="capacity-details">
+                        <div class="detail-item">
+                            <span class="detail-label">CONWAY CREDITS</span>
+                            <span class="detail-value">$<span id="credit-balance">0.00</span></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">SOVEREIGN TREASURY</span>
+                            <span class="detail-value">$<span id="treasury-balance">0.00</span></span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2" style="margin-top: 15px;">
                         <button class="btn btn-xs btn-primary" onclick="triggerRefuel()">REFUEL</button>
                         <button class="btn btn-xs btn-outline-cyan" onclick="openTopUpModal()">TOP UP</button>
                     </div>

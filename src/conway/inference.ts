@@ -149,8 +149,12 @@ export function createInferenceClient(
       console.log(`[INFERENCE] Hit ${resp.status} on ${model}: ${resultText.slice(0, 120)}`);
 
       const fallbackModels = [
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "o4-mini",
         "gpt-5-mini",
         "gpt-5-nano",
+        "claude-haiku-4-5",
         "claude-sonnet-4.5",
         "gpt-4o-mini",
       ];

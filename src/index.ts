@@ -374,10 +374,16 @@ async function bridgeFunds(amount: number): Promise<void> {
   const result = await bridgeUsdcToBase(amount);
 
   if (result.success) {
-    console.log(chalk.green(`\nBridge Submitted Successfully!`));
-    console.log(`Tx ID: ${result.txId}`);
-    console.log(`Expected Output: ${result.expectedAmountOut} USDC`);
-    console.log(`ETA: ~${result.eta} seconds`);
+    const explorerLink = `https://solscan.io/tx/${result.txId}`;
+    console.log(chalk.green(`\n✅ BRIDGE SUBMITTED SUCCESSFULLY`));
+    console.log(chalk.white(`----------------------------------------`));
+    console.log(`Transaction:     ${chalk.cyan(result.txId)}`);
+    console.log(`Explorer:        ${chalk.underline.blue(explorerLink)}`);
+    console.log(`Amount In:       ${amount} USDC (Solana)`);
+    console.log(`Est. Amount Out: ${result.expectedAmountOut} USDC (Base)`);
+    console.log(`Time Remaining:  ~${result.eta} seconds`);
+    console.log(chalk.white(`----------------------------------------`));
+    console.log(chalk.gray(`Funds will arrive at your Base address shortly.`));
   } else {
     console.error(chalk.red(`\nBridge Failed: ${result.error}`));
   }

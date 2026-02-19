@@ -363,6 +363,16 @@ export async function runAgentLoop(
         }
 
         if (!running) break; // Sleep was triggered in follow-up
+
+        // If we exhausted MAX_FOLLOW_UPS (chain never naturally completed),
+        // sleep briefly to avoid burning credits in a tight loop.
+        if (followUps >= MAX_FOLLOW_UPS) {
+          log(config, `[FOLLOW-UP] Max follow-ups (${MAX_FOLLOW_UPS}) reached. Entering brief pause.`);
+          db.setKV("sleep_until", new Date(Date.now() + 30_000).toISOString());
+          db.setAgentState("sleeping");
+          onStateChange?.("sleeping");
+          running = false;
+        }
       }
 
       // ── If no tool calls and just text, the agent might be done thinking ──

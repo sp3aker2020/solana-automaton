@@ -30,7 +30,7 @@ export function loadConfig(): AutomatonConfig | null {
 
   try {
     const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const apiKey = raw.conwayApiKey || loadApiKeyFromConfig();
+    const apiKey = process.env.CONWAY_API_KEY || raw.conwayApiKey || loadApiKeyFromConfig();
 
     return {
       ...DEFAULT_CONFIG,

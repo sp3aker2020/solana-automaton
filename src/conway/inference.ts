@@ -139,16 +139,19 @@ export function createInferenceClient(
       body: JSON.stringify(body),
     });
 
-    // If 429 (quota exceeded), try fallback models
-    if (resp.status === 429) {
-      const text = await resp.text();
-      console.log(`[INFERENCE] Hit 429 on ${model}: ${text.slice(0, 120)}`);
+    let resultText = "";
+    if (!resp.ok) {
+      resultText = await resp.text();
+    }
+
+    // If 429 (quota exceeded) or 400 (certain balance errors), try fallback models
+    if (resp.status === 429 || (resp.status === 400 && resultText.includes("balance"))) {
+      console.log(`[INFERENCE] Hit ${resp.status} on ${model}: ${resultText.slice(0, 120)}`);
 
       const fallbackModels = [
         "gpt-4o",
-        "gpt-4.1-mini",
-        "gpt-4.1",
-        "claude-haiku-4-5",
+        "gpt-4o-mini",
+        "o3-mini",
       ];
 
       for (const fbModel of fallbackModels) {
@@ -156,7 +159,9 @@ export function createInferenceClient(
         console.log(`[INFERENCE] Trying fallback: ${fbModel}...`);
 
         const fbBody: Record<string, unknown> = { ...body, model: fbModel };
-        if (/^(o[1-9]|gpt-5|gpt-4\.1)/.test(fbModel)) {
+        const usesCompletionTokens = /^(o[1-9]|gpt-5|gpt-4\.1)/.test(fbModel);
+
+        if (usesCompletionTokens) {
           delete fbBody.max_tokens;
           fbBody.max_completion_tokens = tokenLimit;
         } else {
@@ -172,16 +177,17 @@ export function createInferenceClient(
 
         if (resp.ok) {
           console.log(`[INFERENCE] ✅ Fallback ${fbModel} succeeded!`);
+          resultText = ""; // Clear error text
           break;
         }
-        const fbText = await resp.text();
-        console.log(`[INFERENCE] Fallback ${fbModel} failed: ${resp.status} ${fbText.slice(0, 120)}`);
+
+        resultText = await resp.text();
+        console.log(`[INFERENCE] Fallback ${fbModel} failed: ${resp.status} ${resultText.slice(0, 120)}`);
       }
     }
 
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(`Inference error: ${resp.status}: ${text}`);
+      throw new Error(`Inference error: ${resp.status}: ${resultText}`);
     }
 
     const data = await resp.json() as any;

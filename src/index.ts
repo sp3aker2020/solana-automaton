@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 import "./prelude.js";
+import { loadEnvFile } from "node:process";
+
+try {
+  loadEnvFile();
+} catch {
+  // Ignore if .env doesn't exist
+}
 /**
  * Conway Automaton Runtime
  *
@@ -431,8 +438,8 @@ async function run(): Promise<void> {
   const inference = createInferenceClient({
     apiUrl: "https://inference.conway.tech",
     apiKey,
-    defaultModel: "gpt-5-mini",
-    lowComputeModel: "gpt-5-mini",
+    defaultModel: "gpt-4o",
+    lowComputeModel: "gpt-4o",
     maxTokens: config.maxTokensPerTurn,
     evmAccount: account,
   });

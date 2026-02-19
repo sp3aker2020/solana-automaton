@@ -176,6 +176,19 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Market Rates (Pricing) -->
+                <div class="info-block glass-card">
+                    <h3>Market Rates</h3>
+                    <div id="pricing-table" class="pricing-table">
+                        <div class="price-row header">
+                            <span>Resource</span>
+                            <span>Rate</span>
+                        </div>
+                        <!-- Populated by JS -->
+                        <div class="price-row dim">Loading rates...</div>
+                    </div>
+                </div>
             </section>
 
             <!-- Right Panel: Financial Health -->
@@ -221,6 +234,17 @@
                         <label>ETHEREUM (EVM)</label>
                         <code id="eth-address">0x0000000000000000000000000000000000000000</code>
                     </div>
+                </div>
+
+                <!-- Command Center (Chat) -->
+                <div class="card chat-card glowing-cyan">
+                    <h2>COMMAND CENTER</h2>
+                    <div class="chat-input-wrapper">
+                        <textarea id="chat-input" placeholder="Give your agent a command..."></textarea>
+                        <button id="send-btn" class="btn btn-sm btn-cyan" onclick="sendChat()">SEND</button>
+                    </div>
+                    <p class="step-desc" style="margin-top: 10px; margin-bottom: 0;">Commands are injected directly as
+                        primary objectives.</p>
                 </div>
             </section>
 

@@ -16,6 +16,7 @@ async function updateDashboard() {
                 hideSetupWizard();
                 trackBalanceChanges(data.balances);
                 renderStatus(data);
+                fetchPrices(); // Fetch prices after status update
             }
             currentData = data;
         } else {
@@ -30,6 +31,14 @@ function addLog(message, type = 'sys') {
     const stream = document.getElementById('log-stream');
     const p = document.createElement('p');
     p.className = 'log-line';
+
+    // Detect approval request patterns
+    if (message.includes("paused to request your approval") ||
+        message.includes("[APPROVAL REQUESTED]") ||
+        message.includes("Waiting for approval")) {
+        p.classList.add('log-attn');
+        type = 'attn';
+    }
 
     const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const prefix = `[${time}] [${type.toUpperCase()}] `;
@@ -391,6 +400,74 @@ async function triggerWake() {
     } catch (err) {
         console.error("Wake failed:", err);
     }
+}
+
+// ─── Chat & Pricing Logic ────────────────────────────────────────
+
+async function sendChat() {
+    const input = document.getElementById('chat-input');
+    const btn = document.getElementById('send-btn');
+    const content = input.value.trim();
+
+    if (!content) return;
+
+    btn.disabled = true;
+    btn.innerText = "SND...";
+
+    try {
+        const response = await fetch('/api/inbox', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+        const result = await response.json();
+        if (result.success) {
+            addLog(`Objective received: "${content.slice(0, 30)}${content.length > 30 ? '...' : ''}"`, 'sys');
+            input.value = '';
+        } else {
+            alert("Failed to send: " + result.error);
+        }
+    } catch (err) {
+        alert("Network error: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "SEND";
+    }
+}
+
+async function fetchPrices() {
+    try {
+        const response = await fetch('/api/prices');
+        const result = await response.json();
+        if (result.success) {
+            renderPrices(result.data);
+        }
+    } catch (err) {
+        console.warn("Failed to fetch prices:", err);
+    }
+}
+
+function renderPrices(data) {
+    const table = document.getElementById('pricing-table');
+    const header = `<div class="price-row header"><span>Resource</span><span>Rate</span></div>`;
+    let rows = '';
+
+    // Model Pricing
+    if (data.models && data.models.length > 0) {
+        data.models.forEach(m => {
+            const avg = (m.pricing.inputPerMillion + m.pricing.outputPerMillion) / 2;
+            rows += `<div class="price-row"><span>${m.id} (avg/1M)</span><span>$${avg.toFixed(2)}</span></div>`;
+        });
+    }
+
+    // Domain Pricing
+    if (data.domainTiers) {
+        data.domainTiers.forEach(d => {
+            rows += `<div class="price-row"><span>${d.tld} registration</span><span>$${(d.registrationPrice / 100).toFixed(2)}</span></div>`;
+        });
+    }
+
+    table.innerHTML = header + rows;
 }
 
 // Initial Boot

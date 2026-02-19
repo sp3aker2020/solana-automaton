@@ -744,3 +744,110 @@ footer {
     background: rgba(0, 242, 255, 0.2);
     border-color: var(--acc-cyan);
 }
+
+/* Pricing Table */
+.pricing-table {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.price-row {
+    display: grid;
+    grid-template-columns: 1fr 100px;
+    font-size: 11px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.price-row.header {
+    color: var(--acc-cyan);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 1px;
+}
+
+.price-row.header span:last-child {
+    text-align: right;
+}
+
+.price-row span:last-child {
+    font-family: 'Roboto Mono', monospace;
+    text-align: right;
+    color: #fff;
+}
+
+/* Attention Log (for Approvals) */
+.log-attn {
+    color: #ffcc00 !important;
+    font-weight: bold;
+    background: rgba(255, 204, 0, 0.1);
+    border-left: 3px solid #ffcc00;
+    padding-left: 8px !important;
+    margin: 4px 0;
+    animation: pulse-attention 2s infinite;
+}
+
+@keyframes pulse-attention {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(255, 204, 0, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 204, 0, 0);
+    }
+}
+
+/* Command Center (Chat) */
+.chat-card {
+    margin-top: 10px;
+}
+
+.chat-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#chat-input {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 15px;
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    height: 100px;
+    resize: none;
+    transition: border-color 0.3s ease;
+}
+
+#chat-input:focus {
+    outline: none;
+    border-color: var(--acc-cyan);
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 12px;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+}
+
+.btn-cyan {
+    background: var(--acc-cyan);
+    color: var(--bg-dark);
+}
+
+.btn-cyan:hover {
+    box-shadow: 0 0 20px var(--acc-cyan);
+}

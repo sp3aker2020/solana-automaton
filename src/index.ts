@@ -64,6 +64,7 @@ Usage:
   automaton --check-domain <domain>  Check domain availability
   automaton --buy-domain   <domain>  Purchase a domain
   automaton --bridge-funds <amount>  Bridge USDC from Solana to Base
+  automaton --prices       Show current market rates for compute & domains
   automaton --version      Show version
   automaton --help         Show this help
 
@@ -141,6 +142,11 @@ Environment:
     }
 
     await bridgeFunds(amount);
+    process.exit(0);
+  }
+
+  if (args.includes("--prices")) {
+    await showPrices();
     process.exit(0);
   }
 
@@ -374,6 +380,61 @@ async function bridgeFunds(amount: number): Promise<void> {
     console.log(`ETA: ~${result.eta} seconds`);
   } else {
     console.error(chalk.red(`\nBridge Failed: ${result.error}`));
+  }
+}
+
+async function showPrices(): Promise<void> {
+  const config = loadConfig();
+  if (!config) { console.error("No config found."); return; }
+  const apiKey = config.conwayApiKey || (await import("./identity/provision.js")).loadApiKeyFromConfig();
+  if (!apiKey) { console.error("No API key found."); return; }
+
+  const { createConwayClient } = await import("./conway/client.js");
+  const { getWallet } = await import("./identity/wallet.js");
+  const { account } = await getWallet();
+
+  const conway = createConwayClient({
+    apiUrl: config.conwayApiUrl,
+    apiKey,
+    sandboxId: config.sandboxId,
+    identity: { evm: account },
+  });
+
+  console.log(chalk.cyan("\n=== CONWAY MARKET RATES ==="));
+
+  try {
+    const [models, computePricing] = await Promise.all([
+      conway.listModels().catch(() => []),
+      conway.getCreditsPricing().catch(() => [])
+    ]);
+
+    console.log(chalk.yellow("\n[COMPUTE MODELS]"));
+    if (models.length === 0) console.log("  No models listed.");
+    models.forEach(m => {
+      const avg = (m.pricing.inputPerMillion + m.pricing.outputPerMillion) / 2;
+      console.log(`  ${chalk.bold(m.id.padEnd(20))} | Avg: $${avg.toFixed(2)} / 1M tokens`);
+    });
+
+    console.log(chalk.yellow("\n[COMPUTE TIERS (Monthly)]"));
+    if (computePricing.length === 0) console.log("  No tiers listed.");
+    computePricing.forEach(t => {
+      console.log(`  ${chalk.bold(t.name.padEnd(10))} | ${t.vcpu} vCPU | ${t.memoryMb}MB RAM | $${(t.monthlyCents / 100).toFixed(2)}`);
+    });
+
+    console.log(chalk.yellow("\n[DOMAIN REGISTRATION (1 Year)]"));
+    const domains = [
+      { tld: ".com", price: 15.00 },
+      { tld: ".ai", price: 120.00 },
+      { tld: ".tech", price: 10.00 },
+      { tld: ".xyz", price: 15.00 }
+    ];
+    domains.forEach(d => {
+      console.log(`  ${chalk.bold(d.tld.padEnd(10))} | $${d.price.toFixed(2)}`);
+    });
+
+    console.log(chalk.cyan("\n===========================\n"));
+  } catch (err: any) {
+    console.error(chalk.red(`Failed to fetch prices: ${err.message}`));
   }
 }
 

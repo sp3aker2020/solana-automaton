@@ -247,17 +247,39 @@ export function createConwayClient(
     query: string,
     tlds?: string,
   ): Promise<DomainSearchResult[]> => {
-    const params = new URLSearchParams({ query });
-    if (tlds) params.set("tlds", tlds);
-    const result = await request("GET", `/v1/domains/search?${params}`);
-    const results = result.results || result.domains || [];
-    return results.map((d: any) => ({
-      domain: d.domain,
-      available: d.available ?? d.purchasable ?? false,
-      registrationPrice: d.registration_price ?? d.purchase_price,
-      renewalPrice: d.renewal_price,
-      currency: d.currency || "USD",
-    }));
+    const paths = [
+      { path: "/v1/domains/search", param: "query" },
+      { path: "/v1/registry/search", param: "query" },
+      { path: "/v1/domains/check", param: "q" },
+    ];
+
+    let lastError = "Unknown search error";
+
+    for (const { path, param } of paths) {
+      try {
+        const params = new URLSearchParams({ [param]: query });
+        if (tlds) params.set("tlds", tlds);
+
+        const result = await request("GET", `${path}?${params}`);
+        const results = result.results || result.domains || result.registry || result.data || [];
+
+        return (Array.isArray(results) ? results : [results]).map((d: any) => ({
+          domain: d.domain || d.name || query,
+          available: d.available ?? d.purchasable ?? (d.status === "available"),
+          registrationPrice: d.registration_price ?? d.purchase_price ?? d.price,
+          renewalPrice: d.renewal_price ?? d.renewal,
+          currency: d.currency || "USD",
+        }));
+      } catch (err: any) {
+        lastError = err.message || "Unknown error";
+        if (lastError.includes("404")) continue;
+        throw err;
+      }
+    }
+
+    throw new Error(
+      `Conway API error: GET /v1/domains/search -> ${lastError}`
+    );
   };
 
   const registerDomain = async (

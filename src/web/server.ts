@@ -248,6 +248,85 @@ export function startDashboardServer(port: number = 18888) {
     });
 
     /**
+     * Inbox Endpoint
+     * Allows injecting local messages for the agent to process
+     */
+    app.post("/api/inbox", async (req, res) => {
+        try {
+            const { content } = req.body;
+            if (!content) return res.status(400).json({ success: false, error: "Missing content" });
+
+            const config = loadConfig();
+            if (!config) return res.status(400).json({ success: false, error: "Not configured" });
+
+            const dbPath = config.dbPath.replace("~", process.env.HOME || "");
+            const { createDatabase } = await import("../state/database.js");
+            const db = createDatabase(dbPath);
+
+            db.insertInboxMessage({
+                id: `local_${Date.now()}`,
+                from: config.creatorAddress,
+                to: config.walletAddress,
+                content: content,
+                signedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString()
+            });
+            db.close();
+
+            console.log(`[DASHBOARD] Local message injected: ${content.slice(0, 50)}...`);
+            res.json({ success: true, message: "Message sent to agent!" });
+        } catch (err: any) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    /**
+     * Prices Endpoint
+     * Returns current pricing for models and domains
+     */
+    app.get("/api/prices", async (req, res) => {
+        try {
+            const config = loadConfig();
+            if (!config) return res.status(400).json({ success: false, error: "Not configured" });
+
+            const { createConwayClient } = await import("../conway/client.js");
+            const { loadApiKeyFromConfig } = await import("../identity/provision.js");
+            const { account } = await getWallet();
+
+            const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
+            if (!apiKey) return res.status(403).json({ success: false, error: "No API key" });
+
+            const conway = createConwayClient({
+                apiUrl: config.conwayApiUrl,
+                apiKey,
+                sandboxId: config.sandboxId || "",
+                identity: { evm: account }
+            });
+
+            const [models, computePricing] = await Promise.all([
+                conway.listModels().catch(() => []),
+                conway.getCreditsPricing().catch(() => [])
+            ]);
+
+            res.json({
+                success: true,
+                data: {
+                    models,
+                    computePricing,
+                    domainTiers: [
+                        { tld: ".com", registrationPrice: 1500, renewalPrice: 1500 },
+                        { tld: ".ai", registrationPrice: 12000, renewalPrice: 12000 },
+                        { tld: ".tech", registrationPrice: 1000, renewalPrice: 1000 },
+                        { tld: ".xyz", registrationPrice: 1500, renewalPrice: 1500 }
+                    ]
+                }
+            });
+        } catch (err: any) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    /**
      * Bridge Credits Endpoint
      * Bridges USDC from Solana to Base to fund the automaton.
      */

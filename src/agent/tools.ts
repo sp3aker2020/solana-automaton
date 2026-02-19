@@ -1761,6 +1761,28 @@ Model: ${ctx.inference.getDefaultModel()}
         }
       },
     },
+    {
+      name: "request_user_confirmation",
+      description: "Request explicit user approval for a critical action (e.g., spending money, deleting files). This tool will pause the agent and wait for a 'CONFIRM' or 'CANCEL' message in the chat.",
+      category: "registry",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", description: "The action being requested for approval" },
+          details: { type: "string", description: "Additional details about the action" },
+        },
+        required: ["action"],
+      },
+      execute: async (args, ctx) => {
+        const action = args.action as string;
+        const details = (args.details as string) || "";
+        console.log(`[APPROVAL REQUESTED] Action: ${action} | Details: ${details}`);
+
+        ctx.db.setKV("waiting_for_approval", JSON.stringify({ action, details, requestedAt: new Date().toISOString() }));
+
+        return `I have paused to request your approval for: ${action}. \nDetails: ${details}\n\nPlease reply with "CONFIRM" to proceed or "CANCEL" to abort. I will wait for your message in the dashboard.`;
+      },
+    },
   ];
 }
 

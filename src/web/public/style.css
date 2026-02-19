@@ -463,6 +463,18 @@ footer {
     margin-bottom: 4px;
 }
 
+.log-line span[class*="FIN"] {
+    color: var(--acc-cyan);
+}
+
+.log-line span[class*="PAY"] {
+    color: var(--acc-purple);
+}
+
+.log-line span[class*="ERR"] {
+    color: #ff4545;
+}
+
 /* Transitions */
 .step,
 .card,

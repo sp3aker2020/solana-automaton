@@ -1,7 +1,7 @@
-
 // State Management
 let currentData = null;
 let currentStep = 1;
+let lastBalances = null;
 
 async function updateDashboard() {
     try {
@@ -14,6 +14,7 @@ async function updateDashboard() {
                 showSetupWizard();
             } else {
                 hideSetupWizard();
+                trackBalanceChanges(data.balances);
                 renderStatus(data);
             }
             currentData = data;
@@ -23,6 +24,61 @@ async function updateDashboard() {
     } catch (err) {
         setOffline();
     }
+}
+
+function addLog(message, type = 'sys') {
+    const stream = document.getElementById('log-stream');
+    const p = document.createElement('p');
+    p.className = 'log-line';
+
+    const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const prefix = `[${time}] [${type.toUpperCase()}] `;
+
+    p.innerHTML = `<span class="dim">${prefix}</span>${message}`;
+
+    // Auto-scroll
+    stream.appendChild(p);
+    stream.scrollTop = stream.scrollHeight;
+
+    // Keep logs lean (max 50)
+    while (stream.children.length > 50) {
+        stream.removeChild(stream.firstChild);
+    }
+}
+
+function trackBalanceChanges(newBalances) {
+    if (!lastBalances) {
+        lastBalances = { ...newBalances };
+        return;
+    }
+
+    const changes = [];
+
+    // Check Conway Credits
+    if (newBalances.conwayCredits > lastBalances.conwayCredits) {
+        changes.push({ msg: `Successfully received $${(newBalances.conwayCredits - lastBalances.conwayCredits).toFixed(2)} Conway Credits.`, type: 'fin' });
+    } else if (newBalances.conwayCredits < lastBalances.conwayCredits) {
+        changes.push({ msg: `Spent $${(lastBalances.conwayCredits - newBalances.conwayCredits).toFixed(2)} on compute/tools.`, type: 'pay' });
+    }
+
+    // Check Solana USDC
+    if (newBalances.solanaUsdc > lastBalances.solanaUsdc) {
+        changes.push({ msg: `Detected incoming Solana Treasury deposit: +$${(newBalances.solanaUsdc - lastBalances.solanaUsdc).toFixed(2)}`, type: 'fin' });
+    } else if (newBalances.solanaUsdc < lastBalances.solanaUsdc) {
+        changes.push({ msg: `Treasury withdrawal/payment on Solana: -$${(lastBalances.solanaUsdc - newBalances.solanaUsdc).toFixed(2)}`, type: 'pay' });
+    }
+
+    // Check Base USDC
+    if (newBalances.baseUsdc > lastBalances.baseUsdc) {
+        changes.push({ msg: `Detected incoming Base Treasury deposit: +$${(newBalances.baseUsdc - lastBalances.baseUsdc).toFixed(2)}`, type: 'fin' });
+    } else if (newBalances.baseUsdc < lastBalances.baseUsdc) {
+        changes.push({ msg: `Treasury withdrawal/payment on Base: -$${(lastBalances.baseUsdc - newBalances.baseUsdc).toFixed(2)}`, type: 'pay' });
+    }
+
+    // Log all changes
+    changes.forEach(c => addLog(c.msg, c.type));
+
+    lastBalances = { ...newBalances };
 }
 
 function showSetupWizard() {
@@ -123,6 +179,9 @@ function renderStatus(data) {
     const statusText = document.getElementById('status-text');
 
     if (data.state === 'running') {
+        if (currentData && currentData.state !== 'running') {
+            addLog("Sovereign Mind Activated. Resuming autonomous operations.", "sys");
+        }
         pulse.className = 'pulse online';
         statusText.innerText = 'AGENT ACTIVE';
         statusText.style.color = 'white';

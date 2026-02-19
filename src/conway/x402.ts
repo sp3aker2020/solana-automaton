@@ -108,10 +108,10 @@ export async function getUsdcBalance(
 
   try {
     // Verify chain and address
-    console.log(`[X402] Checking USDC balance for ${address} on ${network} (Contract: ${usdcAddress})`);
+    console.log(`[X402] Checking USDC balance for ${address} on ${network}`);
 
     const transport = network === "eip155:8453"
-      ? http("https://mainnet.base.org")
+      ? http("https://base.publicnode.com")
       : http();
 
     const client = createPublicClient({
@@ -126,7 +126,7 @@ export async function getUsdcBalance(
       args: [address as Address],
     });
 
-    console.log(`[X402] Raw balance result: ${balance} (${Number(balance) / 1_000_000} USDC)`);
+    console.log(`[X402] Balance: ${balance} (${Number(balance) / 1_000_000} USDC)`);
 
     // USDC has 6 decimals
     return Number(balance) / 1_000_000;

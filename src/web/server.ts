@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
 
 let lastStatus: any = null;
 let lastFetchTime = 0;
-const CACHE_DURATION = 60000; // 60 seconds
+const CACHE_DURATION = 5000; // 5 seconds (Reduced for snappier UI)
 
 export function startDashboardServer(port: number = 18888) {
     const app = express();
@@ -277,6 +277,9 @@ export function startDashboardServer(port: number = 18888) {
      * Triggers the agent's rescue logic to buy credits using on-chain funds.
      */
     app.post("/api/fund-credits", async (req, res) => {
+        // Clear cache immediately
+        lastStatus = null;
+        lastFetchTime = 0;
         try {
             const config = loadConfig();
             if (!config) return res.status(400).json({ success: false, error: "Not configured" });

@@ -301,7 +301,21 @@ export async function runAgentLoop(
       consecutiveErrors = 0;
     } catch (err: any) {
       consecutiveErrors++;
-      log(config, `[ERROR] Turn failed: ${err.message}`);
+      const errorMessage = err.message || String(err);
+      log(config, `[ERROR] Turn failed: ${errorMessage}`);
+
+      // Handle specific terminal errors (Upstream Quota)
+      if (errorMessage.includes("insufficient_quota") || errorMessage.includes("429")) {
+        log(config, `[FATAL] Upstream quota exceeded. Entering survival sleep for 30 minutes.`);
+        db.setAgentState("sleeping");
+        onStateChange?.("sleeping");
+        db.setKV(
+          "sleep_until",
+          new Date(Date.now() + 1800_000).toISOString(),
+        );
+        running = false;
+        break;
+      }
 
       if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
         log(
@@ -402,67 +416,30 @@ export async function checkAndFundCredits(
 
   log(
     config,
-    `[RESCUE] Credits are 0, but treasury has $${(solanaUsdc + baseUsdc).toFixed(2)}. Attempting to buy compute credits...`,
+    `[RESCUE] Credits are 0, but treasury has $${(solanaUsdc + baseUsdc).toFixed(2)}. Attempting to restore compute credits...`,
   );
 
-  try {
-    const { x402Fetch } = await import("../conway/x402.js");
-    const { loadSolanaKeypair } = await import("../identity/solana-wallet.js");
-    const solanaKeypair = await loadSolanaKeypair();
-
-    const apiUrl = (conway as any).__apiUrl || "https://api.conway.tech";
-    const apiKey = (conway as any).__apiKey;
-
-    // We'll try common endpoints for credits.
-    // Conway API is designed to throw a 402 on paid operations.
-    // POST /v1/credits with cents: 50 is a common pattern.
-    const paths = ["/v1/credits/buy", "/v1/credits", "/v1/credits/topup"];
-
-    for (const path of paths) {
-      log(config, `[RESCUE] Trying to purchase credits via ${path}...`);
-      const result = await x402Fetch(
-        `${apiUrl}${path}`,
-        {
-          evm: identity.account,
-          solana: solanaKeypair || undefined,
-        },
-        "POST",
-        JSON.stringify({ cents: 50 }),
-        {
-          Authorization: apiKey,
-          "X-Accept-Payment": "solana:mainnet, eip155:8453",
-        },
-      );
-
-      if (result.success) {
-        log(
-          config,
-          `[RESCUE] Successfully purchased compute credits using Solana USDC!`,
-        );
-        return true;
-      }
-
-      // If we got a real error that isn't a 404, we might want to stop
-      if (result.error && !result.error.includes("404")) {
-        log(
-          config,
-          `[RESCUE] Purchase attempt via ${path} failed: ${result.error}`,
-        );
-      }
-    }
-  } catch (err: any) {
-    log(config, `[RESCUE] Unexpected error during credit top-up: ${err.message}`);
+  // Credits are purchased through Conway's billing dashboard.
+  // The agent can't directly buy credits via API — it needs manual top-up.
+  // But we can still bridge Solana USDC → Base for wallet funding (domains, etc).
+  if (financial.creditsCents <= 0) {
+    log(config, `[RESCUE] ⚠️ Credits depleted. Purchase credits at Conway dashboard (https://conway.tech/billing).`);
+    log(config, `[RESCUE] Wallet balances: Base USDC $${baseUsdc.toFixed(2)}, Solana USDC $${solanaUsdc.toFixed(2)}`);
   }
 
-  // PHASE 2: Autonomous Bridge (if direct fails)
-  if (config.autoBridgeRefill && solanaUsdc >= config.bridgeRefillAmount) {
+  // PHASE 2: Autonomous Bridge (if Solana → Base needed for wallet funding)
+  const shouldBridge = config.autoBridgeRefill !== false;
+  const bridgeThreshold = config.bridgeRefillAmount || 2.0;
+
+  // Bridge Solana USDC → Base if Base wallet is low (for domain purchases, etc)
+  if (shouldBridge && solanaUsdc >= bridgeThreshold && baseUsdc < 1.0) {
     log(
       config,
-      `[RESCUE] Phase 2: Attempting to self-bridge $${config.bridgeRefillAmount} USDC from Solana to Base to stay alive...`,
+      `[RESCUE] Phase 2: Attempting to self-bridge $${bridgeThreshold} USDC from Solana to Base to stay alive...`,
     );
     try {
       const { bridgeUsdcToBase } = await import("./bridge/index.js");
-      const bridgeResult = await bridgeUsdcToBase(config.bridgeRefillAmount);
+      const bridgeResult = await bridgeUsdcToBase(bridgeThreshold);
       if (bridgeResult.success) {
         log(config, `[RESCUE] Bridge initiated! Tx: ${bridgeResult.txId}.`);
         log(

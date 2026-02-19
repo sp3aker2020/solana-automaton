@@ -27,7 +27,8 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
     console.log(chalk.green(`  Ethereum Wallet: ${account.address}`));
     console.log(chalk.green(`  Solana Wallet:   ${keypair.publicKey.toBase58()}`));
   } else {
-    console.log(chalk.green(`  Identities loaded for ${account.address}`));
+    console.log(chalk.green(`  Ethereum Wallet: ${account.address}`));
+    console.log(chalk.green(`  Solana Wallet:   ${keypair.publicKey.toBase58()}`));
   }
   console.log(chalk.dim(`  Keys stored in: ${getAutomatonDir()}\n`));
 

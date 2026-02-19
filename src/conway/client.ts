@@ -44,29 +44,25 @@ export function createConwayClient(
     path: string,
     body?: unknown,
   ): Promise<any> {
-    const { x402Fetch } = await import("./x402.js");
     const url = `${apiUrl}${path}`;
 
-    // Use x402Fetch for all requests to automatically handle payments
-    const result = await x402Fetch(
-      url,
-      options.identity,
+    const resp = await fetch(url, {
       method,
-      body ? JSON.stringify(body) : undefined,
-      {
+      headers: {
+        "Content-Type": "application/json",
         Authorization: apiKey,
-      }
-    );
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
 
-    if (!result.success) {
+    if (!resp.ok) {
+      const text = await resp.text();
       throw new Error(
-        `Conway API error: ${method} ${path} -> ${result.error || "Request failed"}`
+        `Conway API error: ${method} ${path} -> ${resp.status}: ${text}`
       );
     }
 
-    const data = result.response;
-    // Check if it's already an object or needs manual JSON parsing (though x402Fetch handles common cases)
-    return data;
+    return resp.json();
   }
 
   // ─── Sandbox Operations (own sandbox) ────────────────────────
@@ -220,32 +216,24 @@ export function createConwayClient(
     let lastError = "Unknown transfer error";
 
     for (const path of paths) {
-      const resp = await fetch(`${apiUrl}${path}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: apiKey,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        lastError = `${resp.status}: ${text}`;
-        // Try next known endpoint shape before failing.
-        if (resp.status === 404) continue;
-        throw new Error(`Conway API error: POST ${path} -> ${lastError}`);
+      try {
+        // Use request() which wraps x402Fetch, enabling automatic USDC payment
+        // when credits are insufficient (402 -> sign payment -> retry)
+        const data = await request("POST", path, payload);
+        return {
+          transferId: data.transfer_id || data.id || "",
+          status: data.status || "submitted",
+          toAddress: data.to_address || toAddress,
+          amountCents: data.amount_cents ?? amountCents,
+          balanceAfterCents:
+            data.balance_after_cents ?? data.new_balance_cents ?? undefined,
+        };
+      } catch (err: any) {
+        lastError = err.message || "Unknown error";
+        // If it's a 404, try the next endpoint shape
+        if (lastError.includes("404")) continue;
+        throw err;
       }
-
-      const data = await resp.json().catch(() => ({} as any));
-      return {
-        transferId: data.transfer_id || data.id || "",
-        status: data.status || "submitted",
-        toAddress: data.to_address || toAddress,
-        amountCents: data.amount_cents ?? amountCents,
-        balanceAfterCents:
-          data.balance_after_cents ?? data.new_balance_cents ?? undefined,
-      };
     }
 
     throw new Error(

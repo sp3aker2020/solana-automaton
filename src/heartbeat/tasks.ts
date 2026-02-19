@@ -137,6 +137,12 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     // If we have USDC but low credits, wake up to potentially convert
     const credits = await ctx.conway.getCreditsBalance();
     if (balance > 0.5 && credits < 500) {
+      // Don't wake if we just had a quota error (within last 30 mins)
+      const sleepUntil = ctx.db.getKV("sleep_until");
+      if (sleepUntil && new Date(sleepUntil).getTime() > Date.now()) {
+        return { shouldWake: false };
+      }
+
       return {
         shouldWake: true,
         message: `Have ${balance.toFixed(4)} USDC but only $${(credits / 100).toFixed(2)} credits. Consider buying credits.`,
@@ -149,30 +155,36 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   check_social_inbox: async (ctx) => {
     if (!ctx.social) return { shouldWake: false };
 
-    const cursor = ctx.db.getKV("social_inbox_cursor") || undefined;
-    const { messages, nextCursor } = await ctx.social.poll(cursor);
+    try {
+      const cursor = ctx.db.getKV("social_inbox_cursor") || undefined;
+      const { messages, nextCursor } = await ctx.social.poll(cursor);
 
-    if (messages.length === 0) return { shouldWake: false };
+      if (messages.length === 0) return { shouldWake: false };
 
-    // Persist to inbox_messages table for deduplication
-    let newCount = 0;
-    for (const msg of messages) {
-      const existing = ctx.db.getKV(`inbox_seen_${msg.id}`);
-      if (!existing) {
-        ctx.db.insertInboxMessage(msg);
-        ctx.db.setKV(`inbox_seen_${msg.id}`, "1");
-        newCount++;
+      // Persist to inbox_messages table for deduplication
+      let newCount = 0;
+      for (const msg of messages) {
+        const existing = ctx.db.getKV(`inbox_seen_${msg.id}`);
+        if (!existing) {
+          ctx.db.insertInboxMessage(msg);
+          ctx.db.setKV(`inbox_seen_${msg.id}`, "1");
+          newCount++;
+        }
       }
+
+      if (nextCursor) ctx.db.setKV("social_inbox_cursor", nextCursor);
+
+      if (newCount === 0) return { shouldWake: false };
+
+      return {
+        shouldWake: true,
+        message: `${newCount} new message(s) from: ${messages.map((m) => m.from.slice(0, 10)).join(", ")}`,
+      };
+    } catch (err: any) {
+      // Log but don't wake
+      ctx.db.setKV("last_social_inbox_error", err.message);
+      return { shouldWake: false };
     }
-
-    if (nextCursor) ctx.db.setKV("social_inbox_cursor", nextCursor);
-
-    if (newCount === 0) return { shouldWake: false };
-
-    return {
-      shouldWake: true,
-      message: `${newCount} new message(s) from: ${messages.map((m) => m.from.slice(0, 10)).join(", ")}`,
-    };
   },
 
   check_for_updates: async (ctx) => {
@@ -205,6 +217,12 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   health_check: async (ctx) => {
     // Check that the sandbox is healthy
     try {
+      // If no sandboxId, just log it in KV but don't wake
+      if (!ctx.config.sandboxId && !ctx.identity.sandboxId) {
+        ctx.db.setKV("last_health_check_error", "No sandbox ID configured");
+        return { shouldWake: false };
+      }
+
       const result = await ctx.conway.exec("echo alive", 5000);
       if (result.exitCode !== 0) {
         return {
@@ -213,6 +231,12 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
         };
       }
     } catch (err: any) {
+      // If it's the "No sandbox ID" error precisely, don't wake
+      if (err.message.includes("No sandbox ID configured")) {
+        ctx.db.setKV("last_health_check_error", err.message);
+        return { shouldWake: false };
+      }
+
       return {
         shouldWake: true,
         message: `Health check failed: ${err.message}`,

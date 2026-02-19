@@ -3,6 +3,7 @@
  *
  * Wraps Conway's /v1/chat/completions endpoint (OpenAI-compatible).
  * The automaton pays for its own thinking through Conway credits.
+ * Credits are purchased via Conway's billing dashboard.
  */
 
 import type {
@@ -21,16 +22,12 @@ interface InferenceClientOptions {
   defaultModel: string;
   maxTokens: number;
   lowComputeModel?: string;
-  identity: {
-    evm: any; // PrivateKeyAccount is hard to import here without circular deps sometimes
-    solana?: any; // Keypair
-  };
 }
 
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, identity } = options;
+  const { apiUrl, apiKey } = options;
   let currentModel = options.defaultModel;
   let maxTokens = options.maxTokens;
 
@@ -38,7 +35,6 @@ export function createInferenceClient(
     messages: ChatMessage[],
     opts?: InferenceOptions,
   ): Promise<InferenceResponse> => {
-    const { x402Fetch } = await import("./x402.js");
     const model = opts?.model || currentModel;
     const tools = opts?.tools;
 
@@ -67,67 +63,68 @@ export function createInferenceClient(
       body.tool_choice = "auto";
     }
 
-    const headers: Record<string, string> = {
-      "X-Accept-Payment": "x402",
-    };
-
-    // If we're hitting the inference endpoint specifically, omit API key to trigger x402 flow
-    // unless we definitely have credits (which we don't know here easily, but the user has 0).
-    const isDedicatedInference = apiUrl.includes("inference.conway.tech");
-    if (!isDedicatedInference && apiKey) {
-      headers.Authorization = apiKey;
-    }
-
-    const result = await x402Fetch(
-      `${apiUrl}/v1/chat/completions`,
-      identity,
-      "POST",
-      JSON.stringify(body),
-      headers
-    );
-
-    if (!result.success) {
-      throw new Error(
-        `Inference error: ${result.error || "Request failed"}`,
-      );
-    }
-
-    const data = result.response;
-    const choice = data.choices?.[0];
-
-    if (!choice) {
-      throw new Error("No completion choice returned from inference");
-    }
-
-    const message = choice.message;
-    const usage: TokenUsage = {
-      promptTokens: data.usage?.prompt_tokens || 0,
-      completionTokens: data.usage?.completion_tokens || 0,
-      totalTokens: data.usage?.total_tokens || 0,
-    };
-
-    const toolCalls: InferenceToolCall[] | undefined =
-      message.tool_calls?.map((tc: any) => ({
-        id: tc.id,
-        type: "function" as const,
-        function: {
-          name: tc.function.name,
-          arguments: tc.function.arguments,
-        },
-      }));
-
-    return {
-      id: data.id || "",
-      model: data.model || model,
-      message: {
-        role: message.role,
-        content: message.content || "",
-        tool_calls: toolCalls,
+    const resp = await fetch(`${apiUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: apiKey,
       },
-      toolCalls,
-      usage,
-      finishReason: choice.finish_reason || "stop",
-    };
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+
+      // If 429 (quota exceeded), try fallback models
+      if (resp.status === 429 || text.includes("insufficient_quota")) {
+        console.log(`[INFERENCE] Hit 429 on ${model}. Trying fallback models...`);
+
+        const fallbackModels = [
+          "gpt-4o",
+          "gpt-4.1-mini",
+          "gpt-4.1",
+          "claude-haiku-4-5",
+        ];
+
+        for (const fbModel of fallbackModels) {
+          if (fbModel === model) continue;
+          console.log(`[INFERENCE] Trying fallback: ${fbModel}...`);
+
+          // Adjust token param for the fallback model
+          const fbBody: Record<string, unknown> = { ...body, model: fbModel };
+          if (/^(o[1-9]|gpt-5|gpt-4\.1)/.test(fbModel)) {
+            delete fbBody.max_tokens;
+            fbBody.max_completion_tokens = tokenLimit;
+          } else {
+            delete fbBody.max_completion_tokens;
+            fbBody.max_tokens = tokenLimit;
+          }
+
+          const fbResp = await fetch(`${apiUrl}/v1/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: apiKey,
+            },
+            body: JSON.stringify(fbBody),
+          });
+
+          if (fbResp.ok) {
+            console.log(`[INFERENCE] ✅ Fallback ${fbModel} succeeded!`);
+            const data = await fbResp.json() as any;
+            return parseResponse(data, fbModel);
+          }
+
+          const fbText = await fbResp.text();
+          console.log(`[INFERENCE] Fallback ${fbModel} failed: ${fbResp.status} ${fbText.slice(0, 120)}`);
+        }
+      }
+
+      throw new Error(`Inference error: ${resp.status}: ${text}`);
+    }
+
+    const data = await resp.json() as any;
+    return parseResponse(data, model);
   };
 
   const setLowComputeMode = (enabled: boolean): void => {
@@ -148,6 +145,44 @@ export function createInferenceClient(
     chat,
     setLowComputeMode,
     getDefaultModel,
+  };
+}
+
+function parseResponse(data: any, model: string): InferenceResponse {
+  const choice = data.choices?.[0];
+
+  if (!choice) {
+    throw new Error("No completion choice returned from inference");
+  }
+
+  const message = choice.message;
+  const usage: TokenUsage = {
+    promptTokens: data.usage?.prompt_tokens || 0,
+    completionTokens: data.usage?.completion_tokens || 0,
+    totalTokens: data.usage?.total_tokens || 0,
+  };
+
+  const toolCalls: InferenceToolCall[] | undefined =
+    message.tool_calls?.map((tc: any) => ({
+      id: tc.id,
+      type: "function" as const,
+      function: {
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+      },
+    }));
+
+  return {
+    id: data.id || "",
+    model: data.model || model,
+    message: {
+      role: message.role,
+      content: message.content || "",
+      tool_calls: toolCalls,
+    },
+    toolCalls,
+    usage,
+    finishReason: choice.finish_reason || "stop",
   };
 }
 

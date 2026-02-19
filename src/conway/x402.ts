@@ -57,6 +57,7 @@ export interface PaymentRequirement {
   payToAddress: string;
   requiredDeadlineSeconds: number;
   usdcAddress: string;
+  rawAccept?: any;  // Original v2 accept object for building the payment envelope
 }
 
 export interface X402PaymentResult {
@@ -234,17 +235,18 @@ export async function x402Fetch(
       if (!accounts.solana) return { success: false, error: "Solana wallet required but not provided" };
       payment = await signSolanaPayment(accounts.solana, requirement);
     } else {
-      payment = await signPayment(accounts.evm, requirement);
+      payment = await signPayment(accounts.evm, requirement, url, method);
     }
 
     if (!payment) {
       return { success: false, error: "Failed to sign payment (check logs)" };
     }
 
-    // Retry with payment
+    // Retry with payment — send both v1 and v2 header names for compatibility
     const paymentHeader = Buffer.from(
       JSON.stringify(payment),
     ).toString("base64");
+    console.log(`[X402] Sending payment header (${paymentHeader.length} chars, v${payment.x402Version || 1})`);
 
     const paidResp = await fetch(url, {
       method,
@@ -252,6 +254,7 @@ export async function x402Fetch(
         ...headers,
         "Content-Type": "application/json",
         "X-Payment": paymentHeader,
+        "PAYMENT-SIGNATURE": paymentHeader,
       },
       body,
     });
@@ -330,14 +333,26 @@ async function parsePaymentRequired(
     return null;
   }
 
-  const accepts = requirements.accepts as PaymentRequirement[];
-  console.log(`[X402] Server accepts ${accepts.length} payment options: ${accepts.map(a => a.network).join(", ")}`);
+  const accepts = requirements.accepts as any[];
+  console.log(`[X402] Server accepts ${accepts.length} payment options: ${accepts.map((a: any) => a.network).join(", ")}`);
+
+  // Normalize v2 fields to our PaymentRequirement interface
+  // Keep the raw accept object for building the v2 payment envelope
+  const normalize = (accept: any): PaymentRequirement => ({
+    scheme: accept.scheme,
+    network: accept.network,
+    maxAmountRequired: accept.maxAmountRequired,
+    payToAddress: accept.payToAddress || accept.payTo,
+    requiredDeadlineSeconds: accept.requiredDeadlineSeconds || accept.maxTimeoutSeconds || 300,
+    usdcAddress: accept.usdcAddress || accept.asset || USDC_ADDRESSES[accept.network] || USDC_ADDRESSES["eip155:8453"],
+    rawAccept: accept,  // Preserve original for v2 envelope
+  });
 
   // Favor Solana if we have a wallet
   for (const accept of accepts) {
     if (accept.network.startsWith("solana:") && wallets.solana) {
       console.log(`[X402] Selected Solana payment path: ${accept.network}`);
-      return accept;
+      return normalize(accept);
     }
   }
 
@@ -345,7 +360,7 @@ async function parsePaymentRequired(
   for (const accept of accepts) {
     if (accept.network.startsWith("eip155:") && wallets.evm) {
       console.log(`[X402] Selected EVM payment path: ${accept.network}`);
-      return accept;
+      return normalize(accept);
     }
   }
 
@@ -356,25 +371,63 @@ async function parsePaymentRequired(
 export async function signPayment(
   account: PrivateKeyAccount,
   requirement: PaymentRequirement,
+  resourceUrl?: string,
+  resourceMethod?: string,
 ): Promise<any | null> {
   try {
+    // Use the official @x402/evm SDK for correct payment signing
+    const rawAccept = requirement.rawAccept || {};
+    const amountStr = requirement.maxAmountRequired || "0";
+    console.log(`[X402] Signing payment: ${amountStr} raw units ($${(Number(amountStr) / 1_000_000).toFixed(4)}) to ${requirement.payToAddress}`);
+
+    try {
+      const { ExactEvmScheme } = await import("@x402/evm/exact/client");
+      const scheme = new ExactEvmScheme(account);
+
+      // Build the v2 requirements object with the field names the SDK expects
+      const sdkRequirements = {
+        ...rawAccept,
+        payTo: requirement.payToAddress || rawAccept.payTo,
+        amount: rawAccept.amount || rawAccept.maxAmountRequired || amountStr,
+        maxTimeoutSeconds: rawAccept.maxTimeoutSeconds || requirement.requiredDeadlineSeconds || 300,
+        asset: requirement.usdcAddress || rawAccept.asset,
+        network: requirement.network,
+        scheme: "exact",
+        extra: rawAccept.extra || { name: "USD Coin", version: "2", assetTransferMethod: "eip3009" },
+      };
+
+      const result = await scheme.createPaymentPayload(2, sdkRequirements);
+      console.log(`[X402] ✅ Official SDK signed payment successfully`);
+      return result;
+    } catch (sdkErr: any) {
+      console.warn(`[X402] Official SDK failed (${sdkErr.message}), falling back to custom signing`);
+    }
+
+    // Fallback: custom signing (matches official SDK format)
+    const { getAddress } = await import("viem");
     const nonce = `0x${Buffer.from(
       crypto.getRandomValues(new Uint8Array(32)),
-    ).toString("hex")}`;
+    ).toString("hex")}` as `0x${string}`;
 
     const now = Math.floor(Date.now() / 1000);
-    const validAfter = now - 60;
-    const validBefore = now + (requirement.requiredDeadlineSeconds || 300);
+    const validAfter = now - 600; // 10 minutes back (matches official SDK)
+    const validBefore = now + (rawAccept.maxTimeoutSeconds || requirement.requiredDeadlineSeconds || 300);
 
-    const amountStr = requirement.maxAmountRequired || "0";
-    const amount = parseUnits(amountStr, 6);
+    const amount = BigInt(amountStr);
+    const toAddress = getAddress(requirement.payToAddress || rawAccept.payTo) as Address;
+    const assetAddress = getAddress(requirement.usdcAddress || rawAccept.asset || USDC_ADDRESSES[requirement.network] || USDC_ADDRESSES["eip155:8453"]) as Address;
 
-    // EIP-712 typed data for TransferWithAuthorization
+    const extra = rawAccept.extra || {};
+    if (!extra.name || !extra.version) {
+      throw new Error("EIP-712 domain params (name, version) required in payment requirements");
+    }
+
+    const chainId = parseInt(requirement.network.split(":")[1]);
     const domain = {
-      name: "USD Coin",
-      version: "2",
-      chainId: requirement.network === "eip155:84532" ? 84532 : 8453,
-      verifyingContract: (requirement.usdcAddress || USDC_ADDRESSES[requirement.network] || USDC_ADDRESSES["eip155:8453"]) as Address,
+      name: extra.name,
+      version: extra.version,
+      chainId,
+      verifyingContract: assetAddress,
     } as const;
 
     const types = {
@@ -389,17 +442,13 @@ export async function signPayment(
     } as const;
 
     const message = {
-      from: account.address,
-      to: (requirement.payToAddress || (requirement as any).payTo) as Address,
+      from: getAddress(account.address),
+      to: toAddress,
       value: amount,
       validAfter: BigInt(validAfter),
       validBefore: BigInt(validBefore),
-      nonce: nonce as `0x${string}`,
+      nonce,
     };
-
-    if (!message.to) {
-      throw new Error("Missing payToAddress in requirement");
-    }
 
     const signature = await account.signTypedData({
       domain,
@@ -409,15 +458,13 @@ export async function signPayment(
     });
 
     return {
-      x402Version: 1,
-      scheme: "exact",
-      network: requirement.network,
+      x402Version: 2,
       payload: {
         signature,
         authorization: {
           from: account.address,
-          to: message.to,
-          value: amount.toString(),
+          to: toAddress,
+          value: amountStr,
           validAfter: validAfter.toString(),
           validBefore: validBefore.toString(),
           nonce,

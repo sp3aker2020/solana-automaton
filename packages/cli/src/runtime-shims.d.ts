@@ -43,12 +43,18 @@ declare module "@conway/automaton/state/database.js" {
     name: string;
   }
 
+  export interface CliSkill {
+    name: string;
+    enabled: boolean;
+  }
+
   export interface AutomatonCliDatabase {
     getAgentState(): string;
     getTurnCount(): number;
     getInstalledTools(): CliInstalledTool[];
     getHeartbeatEntries(): CliHeartbeatEntry[];
     getRecentTurns(limit: number): CliTurn[];
+    getSkills(enabledOnly?: boolean): CliSkill[];
     close(): void;
   }
 

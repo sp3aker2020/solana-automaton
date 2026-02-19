@@ -36,9 +36,7 @@ function addLog(message, type = 'sys') {
 
     p.innerHTML = `<span class="dim">${prefix}</span>${message}`;
 
-    // Auto-scroll
     stream.appendChild(p);
-    stream.scrollTop = stream.scrollHeight;
 
     // Keep logs lean (max 50)
     while (stream.children.length > 50) {
@@ -244,14 +242,14 @@ function updateSteps(data) {
     // Step 4: Fueling Core - Check Total Liquidity > $0.10
     const totalLiquidity = data.balances.conwayCredits + data.balances.baseUsdc + data.balances.solanaUsdc;
     if (totalLiquidity > 0.1) step = 4;
-    if (data.state === 'running' || data.state === 'sleeping') step = 5;
+    if (data.state === 'running' || data.state === 'sleeping' || data.state === 'active') step = 5;
 
     const steps = document.querySelectorAll('.step');
     const labels = [
         "Initializing Genesis",
         "Identity Forged",
         "Solana Wallet Armed",
-        "Fueling Core",
+        "Liquidity Detected",
         "Sovereign Mind Active"
     ];
 

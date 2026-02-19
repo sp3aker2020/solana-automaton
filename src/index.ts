@@ -179,27 +179,32 @@ async function showStatus(): Promise<void> {
   const children = db.getChildren();
   const registry = db.getRegistryEntry();
 
+  let solUsdc = 0;
+  let baseUsdc = 0;
+  let agentSolanaAddress = "";
+
   let solBalanceInfo = "not loaded";
   try {
     const { getSolanaConnection, getDevnetConnection } = await import("./conway/solana.js");
     const { getUsdcBalance } = await import("./conway/x402.js");
-    const agentSolanaAddress = await (await import("./identity/solana-wallet.js")).getSolanaAddress();
+    agentSolanaAddress = await (await import("./identity/solana-wallet.js")).getSolanaAddress() || "";
 
     if (agentSolanaAddress) {
       const connMain = getSolanaConnection();
       const connDev = getDevnetConnection();
       const pubkey = new (await import("@solana/web3.js")).PublicKey(agentSolanaAddress);
 
-      const [balMain, balDev, usdcMain, usdcDev] = await Promise.all([
+      const [balMain, balDev, uMain, uDev] = await Promise.all([
         connMain.getBalance(pubkey).catch(() => 0),
         connDev.getBalance(pubkey).catch(() => 0),
         getUsdcBalance(agentSolanaAddress, "solana:mainnet").catch(() => 0),
         getUsdcBalance(agentSolanaAddress, "solana:devnet").catch(() => 0)
       ]);
 
+      solUsdc = uMain;
       solBalanceInfo = `${agentSolanaAddress}
-            Mainnet: ${(balMain / 1_000_000_000).toFixed(4)} SOL | ${usdcMain.toFixed(2)} USDC
-            Devnet:  ${(balDev / 1_000_000_000).toFixed(4)} SOL  | ${usdcDev.toFixed(2)} USDC`;
+            Mainnet: ${(balMain / 1_000_000_000).toFixed(4)} SOL | ${uMain.toFixed(2)} USDC
+            Devnet:  ${(balDev / 1_000_000_000).toFixed(4)} SOL  | ${uDev.toFixed(2)} USDC`;
     }
   } catch (e) {
     solBalanceInfo = `error loading: ${e instanceof Error ? e.message : String(e)}`;
@@ -216,35 +221,63 @@ async function showStatus(): Promise<void> {
       transport: http(),
     });
 
-    const [balEth, balUsdc] = await Promise.all([
+    const [balEth, bUsdc] = await Promise.all([
       client.getBalance({ address: config.walletAddress as `0x${string}` }),
       getUsdcBalance(config.walletAddress, "eip155:8453")
     ]);
 
+    baseUsdc = bUsdc;
     baseBalanceInfo = `${config.walletAddress}
-            Mainnet: ${parseFloat(formatEther(balEth)).toFixed(4)} ETH | ${balUsdc.toFixed(2)} USDC`;
+            Mainnet: ${parseFloat(formatEther(balEth)).toFixed(4)} ETH | ${bUsdc.toFixed(2)} USDC`;
   } catch (e) {
     baseBalanceInfo = `error loading: ${e instanceof Error ? e.message : String(e)}`;
   }
 
+  // Fetch Conway Credits
+  const apiKey = config.conwayApiKey || (await import("./identity/provision.js")).loadApiKeyFromConfig();
+  let runtimeCapacity = 0;
+  if (apiKey) {
+    const { createConwayClient } = await import("./conway/client.js");
+    const { getWallet } = await import("./identity/wallet.js");
+    const { loadSolanaKeypair } = await import("./identity/solana-wallet.js");
+    const { account } = await getWallet();
+    const solanaKeypair = await loadSolanaKeypair();
+
+    const conway = createConwayClient({
+      apiUrl: config.conwayApiUrl,
+      apiKey,
+      sandboxId: config.sandboxId,
+      identity: { evm: account, solana: solanaKeypair || undefined },
+    });
+
+    const creditsCents = await conway.getCreditsBalance().catch(() => 0);
+    runtimeCapacity = creditsCents / 100;
+  }
+
+  const totalLiquidity = runtimeCapacity + solUsdc + baseUsdc;
+
   console.log(`
-=== AUTOMATON STATUS ===
-Name:       ${config.name}
-Address:    ${config.walletAddress}
-Base:       ${baseBalanceInfo}
-Solana:     ${solBalanceInfo}
-Creator:    ${config.creatorAddress}
-Sandbox:    ${config.sandboxId}
-State:      ${state}
-Turns:      ${turnCount}
-Tools:      ${tools.length} installed
-Skills:     ${skills.length} active
-Heartbeats: ${heartbeats.filter((h) => h.enabled).length} active
-Children:   ${children.filter((c) => c.status !== "dead").length} alive / ${children.length} total
-Agent ID:   ${registry?.agentId || "not registered"}
-Model:      ${config.inferenceModel}
-Version:    ${config.version}
-========================
+=== SOVEREIGN AUTOMATON STATUS ===
+Name:             ${config.name}
+State:            ${state.toUpperCase()}
+Runtime Capacity: $${runtimeCapacity.toFixed(2)}
+Total Treasury:   $${totalLiquidity.toFixed(2)} (Aggregate USDC)
+
+[WALLETS]
+Base Address:     ${config.walletAddress}
+Base Balance:     ${baseBalanceInfo.split('\n')[1].trim()}
+Solana Address:   ${agentSolanaAddress}
+Solana Balance:   ${solBalanceInfo.split('\n')[1].trim()}
+
+[INTERNALS]
+Turns:            ${turnCount}
+Tools:            ${tools.length} installed
+Skills:           ${skills.length} active
+Heartbeats:       ${heartbeats.filter((h) => h.enabled).length} active
+Agent ID:         ${registry?.agentId || "not registered"}
+Model:            ${config.inferenceModel}
+Version:          ${config.version}
+==================================
 `);
 
   db.close();
@@ -394,20 +427,13 @@ async function run(): Promise<void> {
     },
   });
 
-  // Create inference client
-  // Use dedicated inference endpoint for x402 support (bypassing control plane credit check)
-  const inferenceApiUrl = "https://inference.conway.tech";
-
+  // Create inference client — uses Conway credits via API key auth
   const inference = createInferenceClient({
-    apiUrl: inferenceApiUrl,
+    apiUrl: "https://api.conway.tech",
     apiKey,
     defaultModel: "gpt-5-mini",
     lowComputeModel: "gpt-5-mini",
     maxTokens: config.maxTokensPerTurn,
-    identity: {
-      evm: account,
-      solana: solanaKeypair || undefined,
-    },
   });
 
   // Create social client
@@ -421,6 +447,24 @@ async function run(): Promise<void> {
   const heartbeatConfigPath = resolvePath(config.heartbeatConfigPath);
   const heartbeatConfig = loadHeartbeatConfig(heartbeatConfigPath);
   syncHeartbeatToDb(heartbeatConfig, db);
+
+  const args = process.argv.slice(2);
+  // Handle --wake flag to force clear sleep state
+  if (args.includes("--wake")) {
+    console.log(`[${new Date().toISOString()}] Force waking agent: clearing sleep state.`);
+    db.deleteKV("sleep_until");
+    db.setAgentState("waking");
+  } else {
+    // Normal startup: check if valid sleep state exists
+    const currentState = db.getAgentState();
+    if (currentState === "sleeping") {
+      const sleepUntil = db.getKV("sleep_until");
+      if (sleepUntil && new Date(sleepUntil).getTime() > Date.now()) {
+        const timeLeft = Math.round((new Date(sleepUntil).getTime() - Date.now()) / 1000);
+        console.log(`[${new Date().toISOString()}] Agent is sleeping for ${timeLeft}s more. Use --wake to force start.`);
+      }
+    }
+  }
 
   // Load skills
   const skillsDir = config.skillsDir || "~/.automaton/skills";
@@ -481,24 +525,33 @@ async function run(): Promise<void> {
         skills = loadSkills(skillsDir, db);
       } catch { }
 
-      // Run the agent loop
-      await runAgentLoop({
-        identity,
-        config,
-        db,
-        conway,
-        inference,
-        social,
-        skills,
-        onStateChange: (state: AgentState) => {
-          console.log(`[${new Date().toISOString()}] State: ${state}`);
-        },
-        onTurnComplete: (turn) => {
-          console.log(
-            `[${new Date().toISOString()}] Turn ${turn.id}: ${turn.toolCalls.length} tools, ${turn.tokenUsage.totalTokens} tokens`,
-          );
-        },
-      });
+      // Check if we should be sleeping based on persisted state
+      const currentState = db.getAgentState();
+      const sleepUntilKv = db.getKV("sleep_until");
+
+      if (currentState === "sleeping" && sleepUntilKv && new Date(sleepUntilKv).getTime() > Date.now()) {
+        console.log(`[${new Date().toISOString()}] Resuming sleep until ${sleepUntilKv}`);
+        // Skip directly to sleep handling block mechanism below
+      } else {
+        // Run the agent loop
+        await runAgentLoop({
+          identity,
+          config,
+          db,
+          conway,
+          inference,
+          social,
+          skills,
+          onStateChange: (state: AgentState) => {
+            console.log(`[${new Date().toISOString()}] State: ${state}`);
+          },
+          onTurnComplete: (turn) => {
+            console.log(
+              `[${new Date().toISOString()}] Turn ${turn.id}: ${turn.toolCalls.length} tools, ${turn.tokenUsage.totalTokens} tokens`,
+            );
+          },
+        });
+      }
 
       // Agent loop exited (sleeping or dead)
       const state = db.getAgentState();

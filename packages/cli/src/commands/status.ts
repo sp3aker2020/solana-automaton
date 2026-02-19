@@ -20,18 +20,27 @@ const state = db.getAgentState();
 const turnCount = db.getTurnCount();
 const tools = db.getInstalledTools();
 const heartbeats = db.getHeartbeatEntries();
+const skills = db.getSkills(true);
 const recentTurns = db.getRecentTurns(5);
 
 console.log(`
-=== ${config.name} ===
-Address:    ${config.walletAddress}
-Creator:    ${config.creatorAddress}
-Sandbox:    ${config.sandboxId}
-State:      ${state}
-Turns:      ${turnCount}
-Tools:      ${tools.length} installed
-Heartbeats: ${heartbeats.filter((h) => h.enabled).length} active
-Model:      ${config.inferenceModel}
+=== SOVEREIGN AUTOMATON STATUS ===
+Name:             ${config.name}
+State:            ${state.toUpperCase()}
+Runtime Capacity: (not checked - see dashboard or use automaton --status)
+
+[IDENTITY]
+Address:          ${config.walletAddress}
+Creator:          ${config.creatorAddress}
+Sandbox:          ${config.sandboxId}
+
+[STATS]
+Turns:            ${turnCount}
+Tools:            ${tools.length} installed
+Skills:           ${skills.length} active
+Heartbeats:       ${heartbeats.filter((h) => h.enabled).length} active
+Model:            ${config.inferenceModel}
+==================================
 `);
 
 if (recentTurns.length > 0) {

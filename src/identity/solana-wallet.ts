@@ -82,3 +82,15 @@ export async function getSolanaBalance(address: string): Promise<number> {
     const balance = response.value[0].account.data.parsed.info.tokenAmount.uiAmount;
     return balance || 0;
 }
+
+/**
+ * Get Solana Native (SOL) Balance.
+ */
+export async function getSolanaNativeBalance(address: string): Promise<number> {
+    const { getSolanaConnection } = await import("../conway/solana.js");
+    const { PublicKey } = await import("@solana/web3.js");
+    const connection = getSolanaConnection();
+    const pubkey = new PublicKey(address);
+    const balance = await connection.getBalance(pubkey);
+    return balance / 1_000_000_000;
+}

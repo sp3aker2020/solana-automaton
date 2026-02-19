@@ -88,10 +88,10 @@
                 <p class="step-desc">Purchase Conway Credits using your agent's Solana USDC treasury. Funds are bridged
                     to Base automatically.</p>
                 <div class="amount-grid">
-                    <button class="btn btn-amount" onclick="selectAmount(5)">$5</button>
-                    <button class="btn btn-amount" onclick="selectAmount(10)">$10</button>
-                    <button class="btn btn-amount" onclick="selectAmount(25)">$25</button>
-                    <button class="btn btn-amount" onclick="selectAmount(50)">$50</button>
+                    <button class="btn btn-amount" data-amount="5" onclick="selectAmount(5)">$5</button>
+                    <button class="btn btn-amount" data-amount="15" onclick="selectAmount(15)">$15</button>
+                    <button class="btn btn-amount" data-amount="25" onclick="selectAmount(25)">$25</button>
+                    <button class="btn btn-amount" data-amount="50" onclick="selectAmount(50)">$50</button>
                 </div>
                 <div class="input-group" style="margin-top: 20px;">
                     <label>Amount (USDC)</label>
@@ -117,6 +117,8 @@
                 <img src="assets/logo.png" alt="S" class="dashboard-logo">
                 <div id="status-pulse" class="pulse offline"></div>
                 <span id="status-text">AGENT OFFLINE</span>
+                <button id="wake-btn" class="btn btn-xs btn-outline-cyan hidden" onclick="triggerWake()">WAKE
+                    UP</button>
             </div>
             <div class="agent-identity">
                 <h1 id="agent-label">AGENT: <span id="agent-name">BOOTING...</span></h1>
@@ -162,7 +164,10 @@
                         <span class="currency-symbol">$</span>
                         <span id="credit-balance" class="balance-value">0.00</span>
                     </div>
-                    <button class="btn btn-sm btn-outline-cyan" onclick="openTopUpModal()">TOP UP</button>
+                    <div class="flex gap-2" style="margin-top: 10px;">
+                        <button class="btn btn-xs btn-primary" onclick="triggerRefuel()">REFUEL</button>
+                        <button class="btn btn-xs btn-outline-cyan" onclick="openTopUpModal()">TOP UP</button>
+                    </div>
                 </div>
 
                 <div class="card token-card glowing-purple">
@@ -170,6 +175,30 @@
                     <div class="balance-row">
                         <span class="currency-symbol">$</span>
                         <span id="solana-balance" class="balance-value">0.00</span>
+                    </div>
+                </div>
+
+                <div class="card token-card glowing-green">
+                    <h2>Solana Native</h2>
+                    <div class="balance-row">
+                        <span class="currency-symbol">◎</span>
+                        <span id="solana-sol-balance" class="balance-value">0.0000</span>
+                    </div>
+                </div>
+
+                <div class="card token-card glowing-blue">
+                    <h2>Base USDC</h2>
+                    <div class="balance-row">
+                        <span class="currency-symbol">$</span>
+                        <span id="base-usdc-balance" class="balance-value">0.00</span>
+                    </div>
+                </div>
+
+                <div class="card token-card glowing-yellow">
+                    <h2>Base ETH</h2>
+                    <div class="balance-row">
+                        <span class="currency-symbol">Ξ</span>
+                        <span id="base-eth-balance" class="balance-value">0.0000</span>
                     </div>
                 </div>
 

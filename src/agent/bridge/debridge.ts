@@ -26,32 +26,72 @@ export async function bridgeUsdcDeBridge(amount: number): Promise<BridgeResult> 
         const { account } = await getWallet();
         const evmAddress = account.address;
 
+        const { getSolanaConnection } = await import("../../conway/solana.js");
+        const connection = getSolanaConnection();
+
+        // Check USDC Balance
+        const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+        const usdcMint = new PublicKey(USDC_SOLANA);
+        const ata = await getAssociatedTokenAddress(usdcMint, solanaKeypair.publicKey);
+
+        try {
+            const accountInfo = await getAccount(connection, ata);
+            const balance = Number(accountInfo.amount) / 1_000_000;
+            if (balance < amount) {
+                return {
+                    success: false,
+                    error: `Insufficient USDC balance. You have ${balance.toFixed(2)} USDC but requested ${amount} USDC.`
+                };
+            }
+
+            // Check SOL Balance for gas
+            const solBalance = await connection.getBalance(solanaKeypair.publicKey);
+            if (solBalance < 0.002 * 1e9) {
+                return {
+                    success: false,
+                    error: `Insufficient SOL for gas. You have ${(solBalance / 1e9).toFixed(4)} SOL, but need ~0.002 SOL to power the bridge.`
+                };
+            }
+        } catch (err: any) {
+            if (err.name === "TokenAccountNotFoundError") {
+                return {
+                    success: false,
+                    error: `No USDC account found. Please fund your Solana wallet ${solanaKeypair.publicKey.toBase58()} with USDC.`
+                };
+            }
+            throw err;
+        }
+
         console.log(`[BRIDGE][DEBRIDGE] Requesting order for ${amount} USDC from Solana to Base (${evmAddress})...`);
 
         // Step 1: Create Order Transaction via DLN API
-        const createTxUrl = `https://api.dln.trade/v1.0/chain/transaction`;
+        const createTxUrl = `https://dln.debridge.finance/v1.0/dln/order/create-tx`;
 
         // deBridge uses 6 decimals for USDC on Solana
         const amountUnits = (amount * 1_000_000).toFixed(0);
 
-        const body = {
+        const params = {
             srcChainId: CHAIN_ID_SOLANA,
             srcChainTokenIn: USDC_SOLANA,
             srcChainTokenInAmount: amountUnits,
             dstChainId: CHAIN_ID_BASE,
             dstChainTokenOut: USDC_BASE,
-            dstChainTokenOutAmount: "auto", // deBridge will calculate
+            dstChainTokenOutAmount: "auto",
             dstChainTokenOutRecipient: evmAddress,
+            senderAddress: solanaKeypair.publicKey.toBase58(),
             srcChainOrderAuthorityAddress: solanaKeypair.publicKey.toBase58(),
             dstChainOrderAuthorityAddress: evmAddress,
             affiliateFeePercent: "0",
-            prependOperatingExpenses: true, // Handle gas on destination
+            prependOperatingExpenses: "true",
         };
 
-        const response = await fetch(createTxUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
+        const query = new URLSearchParams(params).toString();
+        const response = await fetch(`${createTxUrl}?${query}`, {
+            method: "GET",
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                "Accept": "application/json"
+            }
         });
 
         if (!response.ok) {
@@ -68,9 +108,6 @@ export async function bridgeUsdcDeBridge(amount: number): Promise<BridgeResult> 
         const txBuffer = Buffer.from(data.tx.data, "base64");
 
         // Step 2: Sign and Send Transaction
-        const { getSolanaConnection } = await import("../../conway/solana.js");
-        const connection = getSolanaConnection();
-
         const transaction = VersionedTransaction.deserialize(txBuffer);
 
         // Update blockhash to be fresh

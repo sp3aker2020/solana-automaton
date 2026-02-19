@@ -66,8 +66,34 @@ export function startDashboardServer(port: number = 18888) {
             const ethWallet = await getWallet();
 
             let solanaBalance = 0;
+            let solanaSol = 0;
             if (solanaAddress) {
+                const { getSolanaNativeBalance } = await import("../identity/solana-wallet.js");
                 solanaBalance = await getSolanaBalance(solanaAddress);
+                solanaSol = await getSolanaNativeBalance(solanaAddress);
+            }
+
+            let baseEth = 0;
+            let baseUsdc = 0;
+            try {
+                const { createPublicClient, http, formatEther } = await import("viem");
+                const { base } = await import("viem/chains");
+                const { getUsdcBalance } = await import("../conway/x402.js");
+
+                const client = createPublicClient({
+                    chain: base,
+                    transport: http(),
+                });
+
+                const [balEth, balUsdc] = await Promise.all([
+                    client.getBalance({ address: ethWallet.account.address }),
+                    getUsdcBalance(ethWallet.account.address, "eip155:8453")
+                ]);
+
+                baseEth = parseFloat(formatEther(balEth));
+                baseUsdc = balUsdc;
+            } catch (e) {
+                // Ignore if Base fetch fails
             }
 
             let conwayCredits = 0;
@@ -86,8 +112,9 @@ export function startDashboardServer(port: number = 18888) {
                     });
                     const balanceCents = await client.getCreditsBalance();
                     conwayCredits = balanceCents / 100;
-                } catch (e) {
-                    // Client might fail if offline or bad key
+                    console.log(`[DASHBOARD] Credits Sync: ${conwayCredits} USD for ${ethWallet.account.address}`);
+                } catch (e: any) {
+                    console.error(`[DASHBOARD] Credits Fetch Error:`, e.message);
                 }
             }
 
@@ -116,6 +143,9 @@ export function startDashboardServer(port: number = 18888) {
                     },
                     balances: {
                         solanaUsdc: solanaBalance,
+                        solanaSol: solanaSol,
+                        baseUsdc: baseUsdc,
+                        baseEth: baseEth,
                         conwayCredits: conwayCredits,
                     },
                     version: config.version || "0.1.0"
@@ -165,7 +195,8 @@ export function startDashboardServer(port: number = 18888) {
                 sandboxId: "",
                 apiKey: "", // Initially empty, will be set during provision
                 autoBridgeRefill: !!autoBridgeRefill,
-                bridgeProvider: bridgeProvider || "mayan"
+                bridgeProvider: bridgeProvider || "mayan",
+                bridgeRefillAmount: (bridgeProvider === "debridge") ? 2.0 : 15.0
             });
 
             // 3. Save Config
@@ -189,33 +220,118 @@ export function startDashboardServer(port: number = 18888) {
     });
 
     /**
+     * Wake Endpoint
+     * Forces the agent out of sleep mode
+     */
+    app.post("/api/wake", async (req, res) => {
+        try {
+            const config = loadConfig();
+            if (!config) return res.status(400).json({ success: false, error: "Not configured" });
+
+            const dbPath = config.dbPath.replace("~", process.env.HOME || "");
+            const { createDatabase } = await import("../state/database.js");
+            const db = createDatabase(dbPath);
+
+            db.setAgentState("waking");
+            db.deleteKV("sleep_until");
+            db.deleteKV("sleep_reason");
+            db.setKV("wake_request", "Manual wake from dashboard");
+            db.close();
+
+            console.log(`[DASHBOARD] Manual WAKE UP triggered by user.`);
+            lastStatus = null; // Force refresh
+
+            res.json({ success: true, message: "Agent woken up!" });
+        } catch (err: any) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    /**
      * Bridge Credits Endpoint
-     * Triggers a self-transfer from Solana to Base to fund credits
+     * Bridges USDC from Solana to Base to fund the automaton.
      */
     app.post("/api/bridge-credits", async (req, res) => {
         try {
             const { amount } = req.body;
-            if (!amount || amount <= 0) {
+            if (!amount || isNaN(amount)) {
                 return res.status(400).json({ success: false, error: "Invalid amount" });
             }
 
-            // Dynamically import to ensure circular deps don't break
             const { bridgeUsdcToBase } = await import("../agent/bridge/index.js");
-
-            console.log(`[DASHBOARD] Bridging ${amount} USDC to credits (Self-Refill)...`);
+            console.log(`[DASHBOARD] Manual BRIDGE triggered: $${amount} USDC`);
             const result = await bridgeUsdcToBase(Number(amount));
 
             if (result.success) {
-                res.json({
-                    success: true,
-                    txId: result.txId,
-                    message: `Bridging initiated! ${amount} USDC sent. Credits will arrive shortly.`
-                });
+                res.json({ success: true, message: `Bridge initiated! ETA ${result.eta}s`, txId: result.txId });
             } else {
-                res.status(500).json({ success: false, error: result.error || "Bridge failed" });
+                res.status(400).json({ success: false, error: result.error });
             }
         } catch (err: any) {
-            console.error("[DASHBOARD] Bridge Error:", err);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    /**
+     * Fund Credits Endpoint
+     * Triggers the agent's rescue logic to buy credits using on-chain funds.
+     */
+    app.post("/api/fund-credits", async (req, res) => {
+        try {
+            const config = loadConfig();
+            if (!config) return res.status(400).json({ success: false, error: "Not configured" });
+
+            const { account } = await getWallet();
+            const { loadSolanaKeypair, getSolanaAddress, getSolanaBalance } = await import("../identity/solana-wallet.js");
+            const solanaKeypair = await loadSolanaKeypair();
+            const { createConwayClient } = await import("../conway/client.js");
+            const { getUsdcBalance } = await import("../conway/x402.js");
+            const { loadApiKeyFromConfig } = await import("../identity/provision.js");
+
+            const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
+            if (!apiKey) return res.status(403).json({ success: false, error: "No API key" });
+
+            const conway = createConwayClient({
+                apiUrl: config.conwayApiUrl,
+                apiKey,
+                sandboxId: (config as any).sandboxId || "",
+                identity: { evm: account, solana: solanaKeypair || undefined }
+            });
+
+            const solanaAddress = await getSolanaAddress();
+            const [baseUsdc, solanaUsdc] = await Promise.all([
+                getUsdcBalance(account.address),
+                solanaAddress ? getSolanaBalance(solanaAddress) : Promise.resolve(0)
+            ]);
+
+            const financial = {
+                creditsCents: 0,
+                usdcBalance: baseUsdc,
+                solanaUsdcBalance: solanaUsdc,
+                lastChecked: new Date().toISOString()
+            };
+
+            const identity = { account, address: account.address } as any;
+
+            // Reuse the rescue logic!
+            const { checkAndFundCredits } = await import("../agent/loop.js");
+
+            const dbPath = config.dbPath.replace("~", process.env.HOME || "");
+            const { createDatabase } = await import("../state/database.js");
+            const db = createDatabase(dbPath);
+
+            console.log(`[DASHBOARD] Manual REFUEL triggered. Balance: $${baseUsdc} Base | $${solanaUsdc} Solana`);
+            const funded = await checkAndFundCredits(config as any, conway, financial, identity, db);
+            db.close();
+
+            if (funded) {
+                lastStatus = null; // Force refresh
+                res.json({ success: true, message: "Credits purchased successfully!" });
+            } else {
+                res.status(400).json({ success: false, error: "Funding failed. Do you have at least $0.10 USDC on Base or Solana?" });
+            }
+        } catch (err: any) {
+            console.error("[DASHBOARD] Refuel Error:", err);
             res.status(500).json({ success: false, error: err.message });
         }
     });

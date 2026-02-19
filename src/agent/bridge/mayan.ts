@@ -36,7 +36,38 @@ export async function bridgeUsdcMayan(amount: number): Promise<BridgeResult> {
         const { account } = await getWallet();
         const evmAddress = account.address;
 
+        const { getSolanaConnection } = await import("../../conway/solana.js");
+        const connection = getSolanaConnection();
+
+        // Check USDC Balance
+        const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+        const usdcMint = new PublicKey(USDC_SOLANA);
+        const ata = await getAssociatedTokenAddress(usdcMint, solanaKeypair.publicKey);
+
+        try {
+            const accountInfo = await getAccount(connection, ata);
+            const balance = Number(accountInfo.amount) / 1_000_000;
+            if (balance < amount) {
+                throw new Error(`Insufficient USDC balance. You have ${balance.toFixed(2)} USDC but requested ${amount} USDC.`);
+            }
+
+            // Check SOL Balance for gas
+            const solBalance = await connection.getBalance(solanaKeypair.publicKey);
+            if (solBalance < 0.002 * 1e9) {
+                throw new Error(`Insufficient SOL for gas. You have ${(solBalance / 1e9).toFixed(4)} SOL, but need ~0.002 SOL to power the bridge.`);
+            }
+        } catch (err: any) {
+            if (err.name === "TokenAccountNotFoundError") {
+                throw new Error(`No USDC account found. Please fund your Solana wallet ${solanaKeypair.publicKey.toBase58()} with USDC.`);
+            }
+            throw err;
+        }
+
         console.log(`[BRIDGE][MAYAN] Requesting quote to bridge ${amount} USDC from Solana to Base (${evmAddress})...`);
+
+        if (amount < 15) {
+            throw new Error(`Mayan requires a minimum of ~$15 USDC. You requested $${amount}.`);
+        }
 
         const quotes = await fetchQuote({
             amount: amount,
@@ -54,13 +85,8 @@ export async function bridgeUsdcMayan(amount: number): Promise<BridgeResult> {
 
         const bestQuote = quotes.sort((a, b) => b.expectedAmountOut - a.expectedAmountOut)[0];
 
-        console.log(`[BRIDGE][MAYAN] Quote found:`);
-        console.log(`  Input: ${amount} USDC`);
-        console.log(`  Output: ~${bestQuote.expectedAmountOut} USDC`);
-        console.log(`  ETA: ~${bestQuote.eta} seconds`);
-
-        const { getSolanaConnection } = await import("../../conway/solana.js");
-        const connection = getSolanaConnection();
+        console.log(`[BRIDGE][MAYAN] Best Quote:`);
+        console.log(JSON.stringify(bestQuote, null, 2));
 
         const originAddress = solanaKeypair.publicKey.toBase58();
 

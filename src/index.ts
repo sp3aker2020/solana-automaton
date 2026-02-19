@@ -205,10 +205,33 @@ async function showStatus(): Promise<void> {
     solBalanceInfo = `error loading: ${e instanceof Error ? e.message : String(e)}`;
   }
 
+  let baseBalanceInfo = "not loaded";
+  try {
+    const { getUsdcBalance } = await import("./conway/x402.js");
+    const { createPublicClient, http, formatEther } = await import("viem");
+    const { base } = await import("viem/chains");
+
+    const client = createPublicClient({
+      chain: base,
+      transport: http(),
+    });
+
+    const [balEth, balUsdc] = await Promise.all([
+      client.getBalance({ address: config.walletAddress as `0x${string}` }),
+      getUsdcBalance(config.walletAddress, "eip155:8453")
+    ]);
+
+    baseBalanceInfo = `${config.walletAddress}
+            Mainnet: ${parseFloat(formatEther(balEth)).toFixed(4)} ETH | ${balUsdc.toFixed(2)} USDC`;
+  } catch (e) {
+    baseBalanceInfo = `error loading: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
   console.log(`
 === AUTOMATON STATUS ===
 Name:       ${config.name}
 Address:    ${config.walletAddress}
+Base:       ${baseBalanceInfo}
 Solana:     ${solBalanceInfo}
 Creator:    ${config.creatorAddress}
 Sandbox:    ${config.sandboxId}

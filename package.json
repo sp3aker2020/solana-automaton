@@ -39,7 +39,7 @@
   "scripts": {
     "build": "tsc && pnpm -r build",
     "dev": "tsx watch src/index.ts",
-    "dashboard": "node dist/index.js --dashboard",
+    "dashboard": "node dist/index.js --dashboard --run",
     "test": "vitest run",
     "clean": "rm -rf dist && pnpm -r clean"
   },

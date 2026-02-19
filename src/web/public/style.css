@@ -261,6 +261,36 @@ header {
     color: var(--acc-purple);
 }
 
+.glowing-blue {
+    background: linear-gradient(135deg, rgba(0, 140, 255, 0.1) 0%, rgba(0, 0, 0, 0.2) 100%);
+    border: 1px solid rgba(0, 140, 255, 0.3);
+    box-shadow: 0 0 30px rgba(0, 140, 255, 0.05);
+}
+
+.glowing-blue .balance-value {
+    color: #008cff;
+}
+
+.glowing-yellow {
+    background: linear-gradient(135deg, rgba(255, 217, 0, 0.1) 0%, rgba(0, 0, 0, 0.2) 100%);
+    border: 1px solid rgba(255, 217, 0, 0.3);
+    box-shadow: 0 0 30px rgba(255, 217, 0, 0.05);
+}
+
+.glowing-yellow .balance-value {
+    color: #ffd900;
+}
+
+.glowing-green {
+    background: linear-gradient(135deg, rgba(0, 255, 140, 0.1) 0%, rgba(0, 0, 0, 0.2) 100%);
+    border: 1px solid rgba(0, 255, 140, 0.3);
+    box-shadow: 0 0 30px rgba(0, 255, 140, 0.05);
+}
+
+.glowing-green .balance-value {
+    color: #00ff8c;
+}
+
 /* Wallet Info */
 .wallet-info {
     display: flex;
@@ -542,6 +572,13 @@ footer {
     padding: 6px 14px;
     margin-top: 10px;
     width: 100%;
+}
+
+.btn-xs {
+    padding: 4px 10px;
+    font-size: 10px;
+    margin-left: 10px;
+    border-radius: 4px;
 }
 
 .btn-outline-cyan:hover {

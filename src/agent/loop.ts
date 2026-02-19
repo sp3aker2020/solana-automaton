@@ -137,8 +137,8 @@ export async function runAgentLoop(
       // Check survival tier
       const tier = getSurvivalTier(financial);
 
-      // RESCUE: If we are in critical/death but have Solana USDC, try to buy credits!
-      if (financial.creditsCents <= 0 && financial.solanaUsdcBalance > 0) {
+      // RESCUE: If we are in critical/death but have USDC on either chain, try to buy credits!
+      if (financial.creditsCents <= 0 && (financial.solanaUsdcBalance > 0 || financial.usdcBalance > 0)) {
         const funded = await checkAndFundCredits(config, conway, financial, identity, db);
         if (funded) {
           // Re-fetch financial state after funding
@@ -389,7 +389,7 @@ function estimateCostCents(
 /**
  * Attempt to fund the automaton by buying credits using Solana USDC if Base credits are 0.
  */
-async function checkAndFundCredits(
+export async function checkAndFundCredits(
   config: AutomatonConfig,
   conway: ConwayClient,
   financial: FinancialState,
@@ -397,11 +397,12 @@ async function checkAndFundCredits(
   db: AutomatonDatabase,
 ): Promise<boolean> {
   const solanaUsdc = financial.solanaUsdcBalance;
-  if (solanaUsdc < 0.1) return false; // Need at least 10 cents
+  const baseUsdc = financial.usdcBalance;
+  if (solanaUsdc < 0.1 && baseUsdc < 0.1) return false; // Need at least 10 cents total
 
   log(
     config,
-    `[RESCUE] Credits are 0, but Solana USDC balance is $${solanaUsdc.toFixed(2)}. Attempting to buy compute credits...`,
+    `[RESCUE] Credits are 0, but treasury has $${(solanaUsdc + baseUsdc).toFixed(2)}. Attempting to buy compute credits...`,
   );
 
   try {
@@ -477,6 +478,19 @@ async function checkAndFundCredits(
     } catch (err: any) {
       log(config, `[RESCUE] Bridge attempt failed: ${err.message}`);
     }
+  }
+
+  // PHASE 3: Final Verification
+  // Re-fetch state and check tier. If we are back to 'normal' (via Base/Solana USDC), 
+  // then we considered the refuel a success even if the central credit endpoints didn't work.
+  const solanaAddress = await (await import("../identity/solana-wallet.js")).getSolanaAddress();
+  const finalState = await getFinancialState(conway, identity.address, solanaAddress || undefined);
+  const { getSurvivalTier } = await import("../conway/credits.js");
+  const finalTier = getSurvivalTier(finalState);
+
+  if (finalTier === "normal") {
+    log(config, `[RESCUE] Agent is now in NORMAL survival state ($${((finalState.creditsCents + (finalState.usdcBalance * 100) + (finalState.solanaUsdcBalance * 100)) / 100).toFixed(2)} liquidity).`);
+    return true;
   }
 
   return false;

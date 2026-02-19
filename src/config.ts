@@ -82,6 +82,7 @@ export function createConfig(params: {
   apiKey: string;
   parentAddress?: Address;
   autoBridgeRefill?: boolean;
+  bridgeRefillAmount?: number;
   bridgeProvider?: "mayan" | "debridge";
 }): AutomatonConfig {
   return {
@@ -107,7 +108,7 @@ export function createConfig(params: {
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
     autoBridgeRefill: params.autoBridgeRefill ?? (DEFAULT_CONFIG.autoBridgeRefill || false),
-    bridgeRefillAmount: DEFAULT_CONFIG.bridgeRefillAmount || 15.0,
+    bridgeRefillAmount: params.bridgeRefillAmount || DEFAULT_CONFIG.bridgeRefillAmount || 15.0,
     bridgeProvider: params.bridgeProvider || "mayan",
   };
 }

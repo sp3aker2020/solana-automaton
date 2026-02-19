@@ -35,15 +35,14 @@ export async function checkFinancialState(
  * Determine the survival tier based on all available assets.
  */
 export function getSurvivalTier(state: FinancialState): SurvivalTier {
-  // If we have credits, use thresholds
-  if (state.creditsCents > SURVIVAL_THRESHOLDS.normal) return "normal";
-  if (state.creditsCents > SURVIVAL_THRESHOLDS.low_compute)
-    return "low_compute";
-  if (state.creditsCents > 0) return "critical";
+  // We use "Total Liquidity" (Credits + USDC) to determine agent health.
+  // This allows the agent to continue in "pay-as-you-go" mode via x402
+  // even if central credit balance is zero.
+  const totalCentsAvailable = state.creditsCents + (state.usdcBalance * 100) + (state.solanaUsdcBalance * 100);
 
-  // If credits are 0, check USDC (Base or Solana)
-  // Even 0.01 USDC is enough to keep the light on and seek funding
-  if (state.usdcBalance > 0 || state.solanaUsdcBalance > 0) return "critical";
+  if (totalCentsAvailable > SURVIVAL_THRESHOLDS.normal) return "normal";
+  if (totalCentsAvailable > SURVIVAL_THRESHOLDS.low_compute) return "low_compute";
+  if (totalCentsAvailable > 0) return "critical";
 
   return "dead";
 }

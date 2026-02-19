@@ -125,6 +125,7 @@ function renderStatus(data) {
     if (data.state === 'running') {
         pulse.className = 'pulse online';
         statusText.innerText = 'AGENT ACTIVE';
+        statusText.style.color = 'white';
     } else if (data.state === 'sleeping') {
         pulse.className = 'pulse online';
         statusText.innerText = 'AGENT SURVIVING (NAP)';
@@ -132,11 +133,23 @@ function renderStatus(data) {
     } else {
         pulse.className = 'pulse offline';
         statusText.innerText = `AGENT ${data.state.toUpperCase()}`;
+        statusText.style.color = 'white';
+    }
+
+    // Show wake button if sleeping
+    const wakeBtn = document.getElementById('wake-btn');
+    if (data.state === 'sleeping') {
+        wakeBtn.classList.remove('hidden');
+    } else {
+        wakeBtn.classList.add('hidden');
     }
 
     // 2. Financials (Animate numbers)
     animateValue('credit-balance', data.balances.conwayCredits);
     animateValue('solana-balance', data.balances.solanaUsdc);
+    animateValue('solana-sol-balance', data.balances.solanaSol, 4);
+    animateValue('base-usdc-balance', data.balances.baseUsdc);
+    animateValue('base-eth-balance', data.balances.baseEth, 4); // 4 decimals for ETH
 
     // 3. Wallets
     document.getElementById('solana-address').innerText = data.wallets.solana || 'NOT INITIALIZED';
@@ -155,7 +168,9 @@ function updateSteps(data) {
     let step = 1;
     if (data.name !== 'Unnamed Agent') step = 2;
     if (data.wallets.solana) step = 3;
-    if (data.balances.conwayCredits > 0) step = 4;
+    // Step 4: Fueling Core - Check Total Liquidity > $0.10
+    const totalLiquidity = data.balances.conwayCredits + data.balances.baseUsdc + data.balances.solanaUsdc;
+    if (totalLiquidity > 0.1) step = 4;
     if (data.state === 'running' || data.state === 'sleeping') step = 5;
 
     const steps = document.querySelectorAll('.step');
@@ -183,8 +198,9 @@ function updateSteps(data) {
     });
 }
 
-function animateValue(id, endValue) {
+function animateValue(id, endValue, decimals = 2) {
     const obj = document.getElementById(id);
+    if (!obj) return;
     const startValue = parseFloat(obj.innerText) || 0;
     if (startValue === endValue) return;
 
@@ -199,7 +215,7 @@ function animateValue(id, endValue) {
         const easedProgress = progress * (2 - progress);
         const currentValue = startValue + (endValue - startValue) * easedProgress;
 
-        obj.innerText = currentValue.toFixed(2);
+        obj.innerText = currentValue.toFixed(decimals);
 
         if (progress < 1) {
             requestAnimationFrame(step);
@@ -224,7 +240,7 @@ function selectAmount(val) {
     // Update visual selection
     const btns = document.querySelectorAll('.btn-amount');
     btns.forEach(b => {
-        if (b.innerText.includes(val)) b.classList.add('active');
+        if (b.getAttribute('data-amount') === String(val)) b.classList.add('active');
         else b.classList.remove('active');
     });
 }
@@ -261,6 +277,48 @@ async function submitTopUp() {
     } finally {
         btn.disabled = false;
         btn.innerText = "BRIDGE FUNDS";
+    }
+}
+
+async function triggerRefuel() {
+    console.log("Refueling credits...");
+    const btn = event.target;
+    const oldText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "FUELING...";
+
+    try {
+        const response = await fetch('/api/fund-credits', {
+            method: 'POST'
+        });
+        const result = await response.json();
+        if (result.success) {
+            console.log("Credits purchased!");
+            updateDashboard(); // Refresh immediately
+        } else {
+            alert("Refuel failed: " + result.error);
+        }
+    } catch (err) {
+        console.error("Refuel failed:", err);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = oldText;
+    }
+}
+
+async function triggerWake() {
+    console.log("Waking agent...");
+    try {
+        const response = await fetch('/api/wake', {
+            method: 'POST'
+        });
+        const result = await response.json();
+        if (result.success) {
+            console.log("Agent woken up!");
+            updateDashboard(); // Refresh immediately
+        }
+    } catch (err) {
+        console.error("Wake failed:", err);
     }
 }
 

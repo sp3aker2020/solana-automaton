@@ -154,6 +154,28 @@
                     <p id="survival-strategy">Provider: <span id="bridge-provider">--</span></p>
                     <p id="refill-amount">Refill: <span id="refill-val">$0.00</span></p>
                 </div>
+
+                <div class="info-block glass-card">
+                    <h3>Treasury Holdings</h3>
+                    <div class="holdings-list">
+                        <div class="holding-item">
+                            <span class="holding-label">Solana USDC</span>
+                            <span class="holding-value">$<span id="solana-balance">0.00</span></span>
+                        </div>
+                        <div class="holding-item">
+                            <span class="holding-label">Solana SOL</span>
+                            <span class="holding-value">◎<span id="solana-sol-balance">0.0000</span></span>
+                        </div>
+                        <div class="holding-item">
+                            <span class="holding-label">Base USDC</span>
+                            <span class="holding-value">$<span id="base-usdc-balance">0.00</span></span>
+                        </div>
+                        <div class="holding-item">
+                            <span class="holding-label">Base ETH</span>
+                            <span class="holding-value">Ξ<span id="base-eth-balance">0.0000</span></span>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- Right Panel: Financial Health -->
@@ -183,45 +205,14 @@
                     </div>
                 </div>
 
-                <div class="card token-card glowing-purple">
-                    <h2>Solana USDC</h2>
-                    <div class="balance-row">
-                        <span class="currency-symbol">$</span>
-                        <span id="solana-balance" class="balance-value">0.00</span>
-                    </div>
-                </div>
-
-                <div class="card token-card glowing-green">
-                    <h2>Solana Native</h2>
-                    <div class="balance-row">
-                        <span class="currency-symbol">◎</span>
-                        <span id="solana-sol-balance" class="balance-value">0.0000</span>
-                    </div>
-                </div>
-
-                <div class="card token-card glowing-blue">
-                    <h2>Base USDC</h2>
-                    <div class="balance-row">
-                        <span class="currency-symbol">$</span>
-                        <span id="base-usdc-balance" class="balance-value">0.00</span>
-                    </div>
-                </div>
-
-                <div class="card token-card glowing-yellow">
-                    <h2>Base ETH</h2>
-                    <div class="balance-row">
-                        <span class="currency-symbol">Ξ</span>
-                        <span id="base-eth-balance" class="balance-value">0.0000</span>
-                    </div>
-                </div>
-
                 <div class="wallet-info glass-card">
+                    <h3>SECURE ENDPOINTS</h3>
                     <div class="wallet-row">
-                        <label>SOL</label>
+                        <label>SOLANA (SPL)</label>
                         <code id="solana-address">--------------------------------------------</code>
                     </div>
                     <div class="wallet-row">
-                        <label>ETH</label>
+                        <label>ETHEREUM (EVM)</label>
                         <code id="eth-address">0x0000000000000000000000000000000000000000</code>
                     </div>
                 </div>

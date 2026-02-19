@@ -341,6 +341,46 @@ header {
     color: #fff;
 }
 
+/* Treasury Holdings */
+.holdings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.holding-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.holding-item:last-child {
+    border-bottom: none;
+}
+
+.holding-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 600;
+}
+
+.holding-value {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
+    color: #fff;
+    font-weight: 700;
+}
+
+.wallet-info h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 15px;
+    letter-spacing: 1px;
+}
+
 .wallet-info {
     display: flex;
     flex-direction: column;

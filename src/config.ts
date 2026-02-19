@@ -109,6 +109,6 @@ export function createConfig(params: {
     parentAddress: params.parentAddress,
     autoBridgeRefill: params.autoBridgeRefill ?? (DEFAULT_CONFIG.autoBridgeRefill || false),
     bridgeRefillAmount: params.bridgeRefillAmount || DEFAULT_CONFIG.bridgeRefillAmount || 15.0,
-    bridgeProvider: params.bridgeProvider || "mayan",
+    bridgeProvider: params.bridgeProvider || "debridge",
   };
 }

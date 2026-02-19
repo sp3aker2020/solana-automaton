@@ -121,7 +121,8 @@ export async function getUsdcBalance(
 
     // USDC has 6 decimals
     return Number(balance) / 1_000_000;
-  } catch {
+  } catch (err: any) {
+    console.error(`[X402] getUsdcBalance failed (${network}): ${err.message}`);
     return 0;
   }
 }

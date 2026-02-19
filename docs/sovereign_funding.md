@@ -30,6 +30,22 @@ This bypasses the need to "top up" a central balance. The agent simply pays from
 -   **REFUEL**: Triggers a check of the agent's *own* wallet. If the wallet has funds, the agent "refuels" its own survival state to active. It does *not* necessarily buy credits if x402 is supported directly.
 -   **TOP UP**: A manual bridge action to move funds from Solana (or other sources) into the agent's primary operating wallet (Base).
 
+## Autonomous Bridging
+To support continuous operation, the agent can automatically bridge funds from **Solana USDC** to **Base USDC** if its Base balance drops below $1.00.
+
+### Supported Providers
+-   **DeBridge (DLN)**: Default for small top-ups (e.g., $1.50). No minimum.
+-   **Mayan Finance**: Best for larger amounts (>$15).
+
+Configuration in `~/.automaton/automaton.json`:
+```json
+{
+  "autoBridgeRefill": true,
+  "bridgeRefillAmount": 1.5,
+  "bridgeProvider": "debridge"
+}
+```
+
 ## For Developers
 
 When modifying the agent's financial logic:
